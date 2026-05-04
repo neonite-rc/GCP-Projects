@@ -1,0 +1,45 @@
+# Copy to terraform.tfvars and fill in your values.
+# terraform.tfvars is gitignored — never commit real IPs or keys.
+
+project_id     = "my-gcp-project-id"
+admin_ip_cidr  = "203.0.113.7/32" # curl -4 ifconfig.me
+ssh_public_key = "ssh-ed25519 AAAA... you@laptop"
+
+# Optional overrides (defaults shown)
+# enable_auto_shutdown = false  # see JOURNEY.md Day 6
+# wireguard_port       = 51820
+
+# Primary region (free-tier eligible)
+# primary_region = {
+#   region        = "us-east1"
+#   zone          = "us-east1-b"
+#   subnet_cidr   = "10.0.0.0/28"
+#   wireguard_cidr = "10.200.200.0/24"
+#   instance_name = "wireguard-vpn"
+# }
+
+# Additional regions — disable any by setting enabled = false
+# All 9 regions below are enabled by default.
+# Cost sorted (least to most): us-west1 ($0), asia-south1, asia-east1,
+# asia-southeast1, europe-west1, europe-west4, europe-west2,
+# asia-northeast1, southamerica-east1
+#
+# additional_regions = {
+#   "us-west1" = {
+#     region          = "us-west1"
+#     zone            = "us-west1-a"
+#     subnet_cidr     = "10.0.1.0/28"
+#     wireguard_cidr  = "10.200.1.0/24"
+#     instance_name   = "wireguard-vpn-w2"
+#     enabled         = true
+#   }
+#   "asia-south1" = {
+#     region          = "asia-south1"
+#     zone            = "asia-south1-a"
+#     subnet_cidr     = "10.0.2.0/28"
+#     wireguard_cidr  = "10.200.2.0/24"
+#     instance_name   = "wireguard-vpn-mumbai"
+#     enabled         = true
+#   }
+#   # ... see variables.tf for all 9 regions
+# }
