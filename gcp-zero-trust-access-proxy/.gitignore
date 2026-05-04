@@ -1,0 +1,65 @@
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+terraform.tfvars
+*.auto.tfvars
+crash.log
+
+# Terraform plan/scratch artifacts
+terraform/tfplan
+terraform/tmp/*.zip
+terraform/modules/**/tmp/
+
+# Secrets & credentials — never commit
+.env
+.env.*
+!.env.example
+CREDENTIALS.env
+credentials.json
+secrets.*
+*.pem
+*.key
+*.conf
+!src/monitoring/.env.example
+!terraform/terraform.tfvars.example
+
+# Keys and client configs
+keys/
+confidential/
+
+# Data exports / logs
+*.csv
+logs/
+vpn-test-*.log
+
+# AI agent session files
+kiro.md
+*.kiro.md
+.kiro/
+claude-code.md
+claudecode.md
+.claude/
+.cursorrules
+.aider*
+agent-session*
+session-*.md
+sessin-ctx.md
+*.kate-swp
+
+# Dev clutter
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+*.log
+tmp/
+temp/
+.cache/
+node_modules/
+.pytest_cache/
+.mypy_cache/
+
+# Proposed / draft
+files/
+docs/new-v2-architecture.md
