@@ -1,0 +1,13 @@
+[Unit]
+Description=Keep WireGuard NAT mappings alive with peer pings
+After=wg-quick@wg0.service
+Wants=wg-quick@wg0.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/wg-keepalive.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
