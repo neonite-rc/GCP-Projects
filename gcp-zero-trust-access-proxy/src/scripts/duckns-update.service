@@ -1,0 +1,9 @@
+[Unit]
+Description=DuckDNS dynamic DNS updater
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/duckdns.env
+ExecStart=/usr/local/sbin/duckns-update.sh
