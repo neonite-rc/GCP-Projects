@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VPN Control</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, sans-serif; background: #0a0a0a; color: #e0e0e0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 24px; }
+  h1 { font-size: 24px; margin-bottom: 8px; color: #fff; }
+  .status-card { background: #1a1a1a; border-radius: 16px; padding: 24px; width: 100%; max-width: 400px; margin: 12px 0; }
+  .status-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #2a2a2a; }
+  .status-row:last-child { border-bottom: none; }
+  .label { color: #888; }
+  .value { font-weight: 600; }
+  .up { color: #4ade80; }
+  .down { color: #f87171; }
+  .btn { width: 100%; max-width: 400px; padding: 16px; border: none; border-radius: 12px; font-size: 18px; font-weight: 600; cursor: pointer; margin: 8px 0; transition: opacity 0.2s; }
+  .btn:active { opacity: 0.7; }
+  .btn-wake { background: #2563eb; color: white; }
+  .btn-wake:disabled { background: #333; color: #666; }
+  .log { background: #1a1a1a; border-radius: 12px; padding: 16px; width: 100%; max-width: 400px; margin-top: 12px; font-family: monospace; font-size: 12px; color: #888; max-height: 200px; overflow-y: auto; }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #555; border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<h1>VPN Control</h1>
+<div class="status-card">
+  <div class="status-row"><span class="label">Status</span><span class="value" id="status">...</span></div>
+  <div class="status-row"><span class="label">IP</span><span class="value" id="ip">...</span></div>
+  <div class="status-row"><span class="label">DNS</span><span class="value" id="dns">...</span></div>
+  <div class="status-row"><span class="label">WireGuard</span><span class="value" id="wg">...</span></div>
+  <div class="status-row"><span class="label">Last check</span><span class="value" id="time">...</span></div>
+</div>
+<button class="btn btn-wake" id="wakeBtn" onclick="wakeVPN()">Wake VPN</button>
+<div class="log" id="log"></div>
+
+<script>
+const HEALTH_URL = 'https://us-east1-portfolio-vpn-2026.cloudfunctions.net/vpn-health';
+const WAKE_BASE_URL = 'https://us-east1-portfolio-vpn-2026.cloudfunctions.net/wake-vpn';
+
+function log(msg) {
+  const el = document.getElementById('log');
+  const t = new Date().toLocaleTimeString();
+  el.innerHTML = `<div>[${t}] ${msg}</div>` + el.innerHTML;
+  if (el.children.length > 20) el.removeChild(el.lastChild);
+}
+
+async function checkHealth() {
+  try {
+    const r = await fetch(HEALTH_URL);
+    const d = await r.json();
+    document.getElementById('status').textContent = d.status;
+    document.getElementById('status').className = 'value ' + (d.status === 'UP' ? 'up' : 'down');
+    document.getElementById('ip').textContent = d.ip || 'N/A';
+    document.getElementById('dns').textContent = d.dns ? 'OK' : 'FAIL';
+    document.getElementById('dns').className = 'value ' + (d.dns ? 'up' : 'down');
+    document.getElementById('wg').textContent = d.wg ? 'OK' : 'FAIL';
+    document.getElementById('wg').className = 'value ' + (d.wg ? 'up' : 'down');
+    document.getElementById('time').textContent = new Date().toLocaleTimeString();
+    document.getElementById('wakeBtn').disabled = d.status === 'UP';
+    log(`Health: ${d.status} (ip=${d.ip})`);
+  } catch (e) {
+    document.getElementById('status').textContent = 'ERROR';
+    document.getElementById('status').className = 'value down';
+    log(`Error: ${e.message}`);
+  }
+}
+
+async function wakeVPN() {
+  const token = prompt('Enter wake token:');
+  if (!token) return;
+  const btn = document.getElementById('wakeBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Starting...';
+  log('Sending wake signal...');
+  try {
+    const r = await fetch(`${WAKE_BASE_URL}?token=${encodeURIComponent(token)}`);
+    const t = await r.text();
+    log(`Wake: ${t}`);
+    btn.textContent = 'Waiting 60s...';
+    setTimeout(() => {
+      checkHealth();
+      btn.textContent = 'Wake VPN';
+      btn.disabled = false;
+    }, 60000);
+  } catch (e) {
+    log(`Wake error: ${e.message}`);
+    btn.textContent = 'Wake VPN';
+    btn.disabled = false;
+  }
+}
+
+checkHealth();
+setInterval(checkHealth, 30000);
+</script>
+</body>
+</html>
