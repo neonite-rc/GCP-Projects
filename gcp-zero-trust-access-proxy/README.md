@@ -14,6 +14,8 @@ Self-hosted ZTNA on GCP — WireGuard + Tailscale dual-stack, custom VPC, full s
 
 Started as VPN research. Tailscale’s coordination server solved WireGuard’s mobile DNS-caching and IP rotation issues, turning a VPN into a true ZTNA design: device posture, dynamic routing, and audit logging without manual reconnection.
 
+**Business decisions:** Why GCP over AWS, why Cloud Run/Functions over GKE, and why these 10 regions were chosen are documented in [docs/JOURNEY.md](docs/JOURNEY.md) under *Business & Platform Rationale* — cost-first, serverless control plane vs VM data plane, and free-tier constraints.
+
 ## Architecture
 
 ```
@@ -91,3 +93,5 @@ vpn-test-suite.sh   end-to-end validation
 - [docs/05-troubleshooting.md](docs/05-troubleshooting.md)
 
 License: CC0 1.0 Universal
+---
+*Business rationale for platform choices is documented in each project's JOURNEY.md.*

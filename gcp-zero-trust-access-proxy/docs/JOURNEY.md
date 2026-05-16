@@ -1153,3 +1153,24 @@ a personal VPN. v2 will combine both:
 - Access proxy features (user management, audit logging, expiry)
 - Production-grade reliability (health checks, auto-recovery, monitoring)
 
+---
+
+## Business & Platform Rationale
+
+These decisions are asked about in interviews. The answers are cost and ops, not just code.
+
+### Why GCP over AWS
+- **Always Free e2-micro**: GCP gives 750 hrs/mo e2-micro in us-east1/us-west1/us-central1. AWS free tier t2.micro is limited and requires different region selection; the always-free model maps directly to $0 compute for a student portfolio.
+- **Always-free networking**: Custom-mode VPC with a single /28, free firewall rules, and free inter-zone traffic within a region keeps the project at $0 during prototyping. AWS charges for data transfer and NAT earlier in the learning curve.
+- **Portfolio signal**: GCP’s free tier is explicit and predictable for a multi-project student account with $300 credits. The project demonstrates VPC, firewall, Shielded VM, and Cloud Monitoring — skills transferable to AWS, but cheaper to learn on GCP.
+
+### Why Cloud Run / Cloud Functions over GKE
+- **Workload fit**: `wake-vpn` and `vpn-health` are event-driven, short-lived HTTP probes. Cloud Run/Functions are pay-per-invocation, zero idle cost.
+- **Ops cost**: GKE incurs control plane fees and node management. For a portfolio VPN with 10 e2-micro VMs, adding GKE would add cost with no benefit — WireGuard needs persistent VMs, not containers.
+- **Business POV**: Serverless for control plane, VMs for data plane. This is the standard cost segregation pattern in production.
+
+### Why only those 10 regions
+- **Cost sorted**: Regions chosen by cheapest e2-micro price per continent, with us-east1/us-west1 free-tier priority.
+- **Latency vs cost**: 10 nodes cover NA/EU/AS/SA with <150 ms RTT from most of my usage. Adding more regions increases idle cost linearly with no usage gain.
+- **Free tier constraint**: Only 2 regions are $0. The other 8 are the cheapest remaining to demonstrate global coverage while keeping monthly cost ~$51.68.
+
