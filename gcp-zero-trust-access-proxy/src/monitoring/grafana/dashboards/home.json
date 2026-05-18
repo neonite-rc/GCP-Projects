@@ -1,0 +1,80 @@
+{
+  "id": 5,
+  "panels": [
+    {
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "count_over_time({job=\"wireguard\"} [24h])",
+          "refId": "A"
+        }
+      ],
+      "title": "WireGuard Events (24h)",
+      "type": "stat"
+    },
+    {
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "count_over_time({job=\"tailscale\"} [24h])",
+          "refId": "A"
+        }
+      ],
+      "title": "Tailscale Events (24h)",
+      "type": "stat"
+    },
+    {
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "count_over_time({job=\"syslog\"} |~ \"error|fail\" [24h])",
+          "refId": "A"
+        }
+      ],
+      "title": "System Errors (24h)",
+      "type": "stat"
+    },
+    {
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
+      "targets": [
+        {
+          "expr": "{job=\"wireguard\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "Latest WireGuard Activity",
+      "type": "logs"
+    }
+  ],
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "title": "VPN Monitoring Home",
+  "uid": "home",
+  "version": 2
+}

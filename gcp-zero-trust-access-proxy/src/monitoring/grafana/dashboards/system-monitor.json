@@ -1,0 +1,97 @@
+{
+  "id": 4,
+  "panels": [
+    {
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "{job=\"docker\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "Docker Logs",
+      "type": "logs"
+    },
+    {
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "targets": [
+        {
+          "expr": "{job=\"syslog\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "System Log",
+      "type": "logs"
+    },
+    {
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 24
+      },
+      "targets": [
+        {
+          "expr": "count_over_time({job=\"syslog\"} [24h])",
+          "refId": "A"
+        }
+      ],
+      "title": "Syslog Volume (24h)",
+      "type": "stat"
+    },
+    {
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 24
+      },
+      "targets": [
+        {
+          "expr": "count_over_time({job=\"syslog\"} |~ \"error|fail\" [24h])",
+          "refId": "A"
+        }
+      ],
+      "title": "Error Count (24h)",
+      "type": "stat"
+    },
+    {
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 24
+      },
+      "targets": [
+        {
+          "expr": "count_over_time({job=\"docker\"} [24h])",
+          "refId": "A"
+        }
+      ],
+      "title": "Docker Volume (24h)",
+      "type": "stat"
+    }
+  ],
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "title": "System Monitor",
+  "uid": "system-monitor",
+  "version": 2
+}
