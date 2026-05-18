@@ -1,0 +1,97 @@
+{
+  "id": 2,
+  "panels": [
+    {
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "count_over_time({job=\"wireguard\", event=\"CONNECT\"} [1h])",
+          "refId": "A"
+        }
+      ],
+      "title": "WireGuard Connects (1h)",
+      "type": "stat"
+    },
+    {
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "count_over_time({job=\"wireguard\", event=\"DISCONNECT\"} [1h])",
+          "refId": "A"
+        }
+      ],
+      "title": "WireGuard Disconnects (1h)",
+      "type": "stat"
+    },
+    {
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "count_over_time({job=\"tailscale\"} [1h])",
+          "refId": "A"
+        }
+      ],
+      "title": "Tailscale Events (1h)",
+      "type": "stat"
+    },
+    {
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
+      "targets": [
+        {
+          "expr": "{job=\"wireguard\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "WireGuard Activity Log",
+      "type": "logs"
+    },
+    {
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "targets": [
+        {
+          "expr": "{job=\"tailscale\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "Tailscale Log",
+      "type": "logs"
+    }
+  ],
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "title": "VPN Overview",
+  "uid": "vpn-overview",
+  "version": 1
+}
