@@ -864,3 +864,292 @@ The 2 "failures" are expected:
 - Add billing budget alerts (Suite 7.2 warning)
 
 ---
+
+## Day 17: Global VPN — 10 regions, for_each refactor
+
+### What changed
+
+Expanded from 2 regions (us-east1, us-west1) to **10 global regions** —
+sorted by cost, covering North America, Europe, Asia, and South America.
+
+### Region rollout (sorted by estimated e2-micro cost)
+
+| # | Region | Location | Instance | Subnet | Cost/mo |
+|---|--------|----------|----------|--------|---------|
+| 1 | us-east1 | South Carolina, USA | wireguard-vpn | 10.0.0.0/28 | **$0** (free tier) |
+| 2 | us-west1 | Oregon, USA | wireguard-vpn-w2 | 10.0.1.0/28 | **$0** (free tier) |
+| 3 | asia-south1 | Mumbai, India | wireguard-vpn-mumbai | 10.0.2.0/28 | ~$4.92 |
+| 4 | asia-east1 | Taiwan | wireguard-vpn-taiwan | 10.0.3.0/28 | ~$4.92 |
+| 5 | asia-southeast1 | Singapore | wireguard-vpn-singapore | 10.0.4.0/28 | ~$5.74 |
+| 6 | europe-west1 | Belgium | wireguard-vpn-belgium | 10.0.5.0/28 | ~$5.56 |
+| 7 | europe-west4 | Netherlands | wireguard-vpn-netherlands | 10.0.6.0/28 | ~$5.56 |
+| 8 | europe-west2 | London, UK | wireguard-vpn-london | 10.0.7.0/28 | ~$6.38 |
+| 9 | asia-northeast1 | Tokyo, Japan | wireguard-vpn-tokyo | 10.0.8.0/28 | ~$6.38 |
+| 10 | southamerica-east1 | São Paulo, Brazil | wireguard-vpn-saopaulo | 10.0.9.0/28 | ~$7.02 |
+
+### Architecture refactor: count → for_each
+
+**Before:** two `module "vpn_server"` blocks (primary hardcoded, secondary via `count`).
+Adding a region meant copy-pasting 50+ lines of Terraform.
+
+**After:** `for_each` over a `additional_regions` map. Each region is a map entry
+with `{region, zone, subnet_cidr, wireguard_cidr, instance_name, enabled}`.
+Terraform creates subnets, firewall rules, and VM instances dynamically.
+
+```
+locals {
+  active_regions = { for k, v in var.additional_regions : k => v if v.enabled }
+}
+```
+
+One entry per region, zero copy-paste. Disable a region with `enabled = false`.
+
+### CIDR scheme (non-overlapping /28 subnets + /24 tunnel networks)
+
+VPC subnets:
+- 10.0.0.0/28 → us-east1
+- 10.0.1.0/28 → us-west1
+- 10.0.2.0/28 → asia-south1
+- 10.0.3.0/28 → asia-east1
+- 10.0.4.0/28 → asia-southeast1
+- 10.0.5.0/28 → europe-west1
+- 10.0.6.0/28 → europe-west4
+- 10.0.7.0/28 → europe-west2
+- 10.0.8.0/28 → asia-northeast1
+- 10.0.9.0/28 → southamerica-east1
+
+WireGuard tunnel networks:
+- 10.200.0.0/24 → us-east1 (primary)
+- 10.200.1.0/24 → us-west1
+- 10.200.2.0/24 → asia-south1
+- 10.200.3.0/24 → asia-east1
+- 10.200.4.0/24 → asia-southeast1
+- 10.200.5.0/24 → europe-west1
+- 10.200.6.0/24 → europe-west4
+- 10.200.7.0/24 → europe-west2
+- 10.200.8.0/24 → asia-northeast1
+- 10.200.9.0/24 → southamerica-east1
+
+### Health check: dynamic multi-region probing
+
+`vpn-health` Cloud Function receives `REGION_HOSTS` and `REGION_KEYS` env vars
+(comma-separated) built from the Terraform map at plan time. Probes each
+region's internal hostname, writes per-instance metrics to Cloud Monitoring.
+
+No hardcoded region list — add a region to the map and the health check
+automatically picks it up on next apply.
+
+### Client management: `add-client.sh --region`
+
+```
+sudo add-client.sh my-phone                    # local server only
+sudo add-client.sh --region all my-laptop      # all servers via SSH
+sudo add-client.sh --region asia-south1 my-tab # specific region
+```
+
+Auto-discovers remote hosts from Terraform output or `REGION_SSH_HOSTS` env var.
+
+### Cost estimate (all 10 regions)
+
+| Component | Monthly Cost |
+|-----------|-------------|
+| 2× e2-micro (us-east1 + us-west1) | **$0** (free tier) |
+| 8× e2-micro (international) | ~$47.48 |
+| 10× boot disk 10 GB | $4.00 |
+| Cloud DNS zone | $0.20 |
+| **Total** | **~$51.68/mo** |
+
+vs. 3 commercial VPN seats at $10–15/mo = $30–45/mo. Competitive at 10× the
+geographic coverage.
+
+### Trade-offs accepted
+
+- **WireGuard clients are per-server.** Each server has its own endpoint;
+  client configs are region-specific. Tailscale solves this (coordination
+  server tracks all IPs), but WireGuard configs need manual distribution.
+- **No global load balancer.** DNS-based routing (Cloud DNS weighted records)
+  gives sticky routing, not true L4 load balancing. Acceptable for personal use.
+- **8 international VMs are not free-tier.** The 2 US VMs are $0; the other
+  8 cost ~$47/mo combined. This is the price of global coverage.
+
+---
+
+## Day 17: Multi-Region Dashboard & Architecture Decision
+
+### What was built
+
+Activated 3 additional VPN servers (Oregon, Tokyo, London) alongside the
+primary (South Carolina). All 4 run WireGuard + Tailscale, advertise exit
+nodes, and have phone1 WireGuard clients pre-configured.
+
+| Region | Server | IP | Tailscale IP |
+|--------|--------|----|-------------|
+| us-east1 (primary) | wireguard-vpn | 104.196.183.161 | 100.112.117.1 |
+| us-west1 (Oregon) | wireguard-vpn-w2 | 136.67.124.77 | 100.99.149.53 |
+| asia-northeast1 (Tokyo) | wireguard-vpn-tokyo | 34.180.106.18 | 100.95.2.34 |
+| europe-west2 (London) | wireguard-vpn-london | 34.105.159.76 | 100.121.90.47 |
+
+### Problem encountered
+
+Tailscale exit node preference is a **client-side setting**. The server
+cannot control which exit node the phone uses — only the phone's Tailscale
+app can do that. This means a server-side dashboard can show status but
+cannot switch the phone's exit node.
+
+### Current architecture (implemented)
+
+- Dashboard runs on primary server at `0.0.0.0:8080`
+- Phone switches servers by scanning WireGuard QR codes
+- QR codes generated server-side with `qrencode`
+- Tailscale used for server-to-server mesh and dashboard access
+- Dashboard is a monitor + QR code generator
+
+**Pros:** Works from phone browser, shows live status, QR codes are tangible
+**Cons:** QR scan is 3-step process, dashboard exposed to internet, no
+latency-based switching, WireGuard configs hardcoded
+
+Full details: `docs/architecture-current.md`
+
+### Proposed architecture (from `files/` directory)
+
+- Dashboard runs on laptop at `127.0.0.1:7979`
+- Uses Tailscale CLI directly: `tailscale set --exit-node=<hostname>`
+- One-tap switching — click server, done
+- fping-based "Fastest" server selection
+- Light/dark theme, auto-refresh every 15s
+- Systemd user service for auto-start
+- Localhost only — not exposed to internet
+
+**Pros:** One-tap switching, secure (localhost), latency testing, clean UI
+**Cons:** Only works on laptop (not phone browser), phone still needs
+manual Tailscale app switching
+
+Full details: `docs/architecture-proposed.md`
+
+### The core question
+
+How should the VPN dashboard work?
+
+| Approach | Phone | Laptop | Security |
+|----------|-------|--------|----------|
+| Current (QR codes) | Scan QR in WireGuard app | Not supported | Public (8080) |
+| Proposed (Tailscale) | Tailscale app (manual) | One-tap dashboard | Localhost only |
+| Hybrid | Tailscale app + QR fallback | Dashboard | Both |
+
+### Infrastructure changes on Day 17
+
+- Fixed `add-client.sh` bug: `NEXT_IP` → `next_ip` (variable name mismatch)
+- Created GCP firewall rule `vpn-vpc-allow-dashboard` for port 8080
+- Added `vpn-exit-node` tag to all 4 servers
+- DuckDNS updated to new primary IP (104.196.183.161)
+- Deployed phone1 WireGuard clients to all 3 new servers
+- Tailscale auth completed on all 4 servers, exit nodes approved
+
+### Claude analysis to redirect to a better path
+Gap 1: Reliability — your biggest blind spot
+
+Every server is a single e2-micro with no watchdog, no health checks, and no automatic recovery. If WireGuard crashes or the Tailscale daemon hangs, you find out when your traffic drops.
+
+Fixes:
+
+Add systemd Restart=always with RestartSec=5 on both wg-quick and tailscaled — this alone prevents 80% of outages
+GCP uptime checks on each server's WireGuard port (51820/UDP) with alerting to email or Telegram
+wg show health check cron (every 2 min) that restarts the tunnel if peer count drops to 0 when it shouldn't
+For real HA: instance templates + managed instance groups, but that's overkill for personal use unless you want it as a portfolio piece
+Gap 2: Security — several real issues
+
+Dashboard exposed on 0.0.0.0:8080 with no auth is the worst one — anyone who finds that IP gets your server topology and QR codes. The proposed localhost approach fixes this for the laptop, but it's still no-auth.
+
+Key rotation doesn't exist. Your WireGuard private keys are almost certainly sitting in /etc/wireguard/wg0.conf with no rotation plan and no backup strategy.
+
+Concrete fixes:
+
+Dashboard: add HTTP Basic Auth at minimum, or run it behind Tailscale Serve so it's only reachable over your tailnet with Tailscale identity
+tailscale serve --bg http://localhost:7979 makes the dashboard available at https://your-machine.tailnet.ts.net with automatic HTTPS and Tailscale auth — zero extra code
+Move WireGuard private keys to a proper secret store. GCP Secret Manager is free for the first 6 versions. Pull at boot via a startup script rather than baking into the VM or config files
+AllowedIPs = 0.0.0.0/0 in WireGuard configs with no kill switch means if the tunnel drops, traffic leaks in plaintext. Add PostDown = iptables -D FORWARD -i wg0 -j ACCEPT + corresponding routing rules to enforce the kill switch
+Gap 3: Observability — you're flying blind
+
+Right now you have no idea how much bandwidth each server is handling, which peers are connected, or when a server started misbehaving. You find problems when you notice them, not before.
+
+Lightweight stack that costs nothing:
+
+WireGuard metrics exporter (prometheus/wireguard_exporter or mdlayher/wireguard) exposes handshake timestamps, transfer bytes, and peer count per interface
+GCP Cloud Monitoring (free tier covers this) — custom dashboards showing bandwidth per server, handshake age (stale = peer dropped), and uptime
+Alert policy: if last handshake for any peer is >3 minutes old, page you. This catches tunnel staleness before you notice traffic issues
+Structured logging on the dashboard (structlog or just JSON to stdout → Cloud Logging) gives you an audit trail of every server switch
+Gap 4: IaC completeness
+
+You have partial Terraform but the WireGuard config, systemd units, and server bootstrapping are presumably manual. Manual server state is a disaster waiting to happen — if you rebuild a VM, you're reconstructing from memory.
+
+Proper setup:
+
+Full Terraform for all GCP resources (already partially done — finish it)
+Ansible playbook that runs on first boot and on config changes: installs WireGuard, writes configs from templates (pulling secrets from Secret Manager), enables and starts services
+Store the playbook in the same repo as your Terraform. make apply should be able to rebuild any server from scratch in under 5 minutes
+Gap 5: Client lifecycle — the real production gap
+
+Right now "adding a device" means manually generating a key pair, editing server configs, restarting WireGuard, and generating a QR code. There's no revocation. There's no audit of who has access.
+
+If you want this to actually feel like a VPN service (even just for yourself):
+
+Build a simple client registry: a YAML/JSON file (or SQLite) that maps device name → public key → allowed IPs → provisioning date
+Peer addition should be wg set wg0 peer <pubkey> allowed-ips <ip>/32 (no restart required — WireGuard supports live peer updates)
+Revocation: wg set wg0 peer <pubkey> remove — instant, no restart
+Script this as a CLI: vpn-admin add-peer --name "ansh-laptop" --key <pubkey> that updates all 4 servers via Tailscale SSH
+
+---
+
+## Day 18: v1 Wrap-up — The Accidental Architecture
+
+### What I set out to build
+
+Personal VPN to hide my IP. commodity — NordVPN does this.
+
+### What I actually built
+
+Multi-region server infrastructure with:
+- **Tailscale mesh** — admins always connected, no QR needed
+- **WireGuard with per-user configs** — employees scan QR to connect
+- **Expiring access** — configs expire, force re-scan
+- **Audit potential** — WireGuard logs handshake times, traffic stats
+- **Centralized dashboard** — see who's connected where
+
+### Why this is stronger
+
+| Personal VPN | Zero Trust Access Proxy |
+|-------------|------------------------|
+| "I want to watch Netflix from another country" | "I need to grant a contractor 48h access to production" |
+| $0 value, saturated market | Enterprise compliance requirement |
+| No logs = feature | Full audit trail = feature |
+| Single user | Role-based access |
+
+### The WireGuard logs already exist
+
+```
+CONNECT      phone1    ip=10.200.200.2..   delta_rx=52088324B
+DISCONNECT   phone1    last_seen 1723891200E
+```
+
+That's already an access log. Timestamps, traffic deltas, peer names.
+Add expiry + a user database and you've got a working ZTNA product.
+
+### The accidental architecture is the real portfolio piece
+
+"I built a VPN" → "I built a zero trust access proxy with expiring
+credentials and audit logging" hits very differently in an interview.
+
+### v1 shutdown
+
+All servers terminated. Credentials stored in `confidential/`.
+Tailscale IPs are permanent; WireGuard IPs are ephemeral.
+
+### v2 direction
+
+v2 will pivot back toward a proper VPN service — the access proxy
+architecture was a better product insight, but the original goal was
+a personal VPN. v2 will combine both:
+- Personal VPN (hide IP, route traffic)
+- Access proxy features (user management, audit logging, expiry)
+- Production-grade reliability (health checks, auto-recovery, monitoring)
+
