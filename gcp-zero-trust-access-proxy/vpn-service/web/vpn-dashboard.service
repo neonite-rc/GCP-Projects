@@ -1,0 +1,19 @@
+[Unit]
+Description=VPN Dashboard Server
+After=network.target tailscaled.service
+Wants=tailscaled.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/vpn-service/web
+ExecStart=/usr/bin/python3 /opt/vpn-service/web/server.py --port 8080
+Restart=always
+RestartSec=5
+
+Environment=VPN_TERRAFORM_DIR=/opt/vpn-service/terraform
+Environment=VPN_TS_AUTHKEY=
+Environment=VPN_PROJECT=
+
+[Install]
+WantedBy=multi-user.target

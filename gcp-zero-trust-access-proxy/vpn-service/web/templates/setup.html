@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VPN — Setup</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#09090b;color:#fafafa;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.card{max-width:420px;width:100%;margin:24px;background:#18181b;border:1px solid #27272a;border-radius:14px;padding:36px 28px;text-align:center}
+h1{font-size:20px;font-weight:600;margin-bottom:6px}
+.sub{color:#71717a;font-size:13px;line-height:1.5;margin-bottom:24px}
+.step{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid #27272a;text-align:left}
+.step:last-child{border-bottom:none}
+.num{width:28px;height:28px;border-radius:50%;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.25);color:#6366f1;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.step-body h3{font-size:13px;font-weight:600;margin-bottom:3px}
+.step-body p{font-size:12px;color:#71717a;line-height:1.4}
+.copy-row{display:flex;gap:6px;margin-top:8px}
+.copy-row input{flex:1;background:#09090b;border:1px solid #27272a;border-radius:6px;padding:8px 10px;color:#fafafa;font-family:'SF Mono',Consolas,monospace;font-size:11px}
+.copy-row button{padding:8px 12px;border-radius:6px;border:1px solid #6366f1;background:transparent;color:#6366f1;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap}
+.copy-row button:active{background:rgba(99,102,241,.1)}
+.authkey{background:#09090b;border:1px solid #27272a;border-radius:6px;padding:10px;font-family:'SF Mono',Consolas,monospace;font-size:11px;word-break:break-all;margin-top:8px;cursor:pointer;color:#a1a1aa}
+.authkey:active{border-color:#6366f1}
+.dash-link{display:inline-block;margin-top:20px;padding:12px 24px;background:#6366f1;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:600;text-decoration:none}
+.dash-link:active{opacity:.8}
+.hint{font-size:11px;color:#52525b;margin-top:12px}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Connect to VPN</h1>
+  <div class="sub">Install Tailscale, join the network, then open the dashboard.</div>
+
+  <div class="step">
+    <div class="num">1</div>
+    <div class="step-body">
+      <h3>Install Tailscale</h3>
+      <p>Download from App Store or Play Store</p>
+      <div class="copy-row">
+        <button onclick="window.open('https://tailscale.com/download','_blank')">Open Store</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">2</div>
+    <div class="step-body">
+      <h3>Join the network</h3>
+      <p>In Tailscale: Settings &rarr; Use auth key, then paste:</p>
+      <div class="authkey" id="ak" onclick="copyAk()"></div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">3</div>
+    <div class="step-body">
+      <h3>Open the dashboard</h3>
+      <p>Once connected, tap below:</p>
+      <div class="copy-row">
+        <input type="text" id="dash-url" readonly>
+        <button onclick="copyUrl()">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <a class="dash-link" id="dash-btn" href="/dashboard">Open Dashboard</a>
+  <div class="hint" id="hint"><span class="spinner" style="display:inline-block;width:12px;height:12px;border:2px solid #27272a;border-top-color:#6366f1;border-radius:50%;animation:spin .7s linear infinite"></span> Waiting for Tailscale...</div>
+</div>
+
+<script>
+const AUTH_KEY = '__AUTH_KEY__';
+const TS_IP = '__TS_IP__';
+
+document.getElementById('ak').textContent = AUTH_KEY || 'tskey-auth-...';
+document.getElementById('dash-url').value = 'http://' + TS_IP + ':8080';
+
+function copyAk() {
+  navigator.clipboard.writeText(AUTH_KEY);
+  document.getElementById('ak').style.borderColor = '#22c55e';
+  setTimeout(() => { document.getElementById('ak').style.borderColor = ''; }, 800);
+}
+function copyUrl() {
+  navigator.clipboard.writeText('http://' + TS_IP + ':8080');
+}
+
+let tries = 0;
+async function check() {
+  try {
+    const r = await fetch('/api/status');
+    const d = await r.json();
+    if (d.status === 'connected' || d.ts_ip) {
+      document.getElementById('hint').innerHTML = '<span style="color:#22c55e">&#10003; Connected</span>';
+      document.getElementById('dash-btn').disabled = false;
+      return;
+    }
+  } catch(e) {}
+  tries++;
+  if (tries > 20) {
+    document.getElementById('hint').innerHTML = '<span style="color:#eab308">Make sure Tailscale is connected</span>';
+  }
+  setTimeout(check, 3000);
+}
+check();
+</script>
+<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+</body>
+</html>
