@@ -18,6 +18,10 @@ Subnet: 10.0.0.0/28
 Private Google Access: ON
 ```
 
+### Current as-built
+
+![Current architecture](diagrams/architecture.png)
+
 ## Components
 
 ### Custom VPC (`vpn-vpc`)
