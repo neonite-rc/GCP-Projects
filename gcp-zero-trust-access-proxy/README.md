@@ -18,15 +18,8 @@ Started as VPN research. Tailscale’s coordination server solved WireGuard’s 
 
 ## Architecture
 
-```
-                     Cloud DNS (weighted A records)
-                    /          |           \        \
-             us-east1     asia-south1   europe-west1  ... (10 regions)
-            (FREE $0)     (Mumbai)      (Belgium)
-         e2-micro VM    e2-micro VM   e2-micro VM
-         wg0 + TS        wg0 + TS      wg0 + TS
-         10.0.0.0/28     10.0.2.0/28   10.0.5.0/28
-```
+![Architecture](docs/diagrams/architecture.png)
+
 
 10 access nodes across 4 continents. Clients connect via Tailscale primary — auto-reconnect, IP change tracking, DERP fallback — with WireGuard as backup. SSH locked to single admin IP via Terraform validation.
 
