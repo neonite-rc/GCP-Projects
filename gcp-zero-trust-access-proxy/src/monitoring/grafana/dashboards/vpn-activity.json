@@ -1,0 +1,45 @@
+{
+  "dashboard": {
+    "title": "VPN Activity",
+    "uid": "vpn-activity",
+    "panels": [
+      {
+        "title": "Tailscale Logs",
+        "type": "logs",
+        "datasource": "Loki",
+        "gridPos": {"h": 10, "w": 24, "x": 0, "y": 0},
+        "targets": [{"expr": "{job=\"tailscale\"}", "refId": "A"}]
+      },
+      {
+        "title": "WireGuard Activity Log",
+        "type": "logs",
+        "datasource": "Loki",
+        "gridPos": {"h": 10, "w": 24, "x": 0, "y": 10},
+        "targets": [{"expr": "{job=\"wireguard\"}", "refId": "A"}]
+      },
+      {
+        "title": "WireGuard CONNECT Events",
+        "type": "stat",
+        "datasource": "Loki",
+        "gridPos": {"h": 5, "w": 8, "x": 0, "y": 20},
+        "targets": [{"expr": "count_over_time({job=\"wireguard\", event=\"CONNECT\"} [24h])", "refId": "A"}]
+      },
+      {
+        "title": "WireGuard DISCONNECT Events",
+        "type": "stat",
+        "datasource": "Loki",
+        "gridPos": {"h": 5, "w": 8, "x": 8, "y": 20},
+        "targets": [{"expr": "count_over_time({job=\"wireguard\", event=\"DISCONNECT\"} [24h])", "refId": "A"}]
+      },
+      {
+        "title": "System Syslog",
+        "type": "logs",
+        "datasource": "Loki",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 25},
+        "targets": [{"expr": "{job=\"syslog\"}", "refId": "A"}]
+      }
+    ],
+    "time": {"from": "now-24h", "to": "now"}
+  },
+  "overwrite": true
+}

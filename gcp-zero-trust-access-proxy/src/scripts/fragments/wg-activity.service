@@ -1,0 +1,7 @@
+[Unit]
+Description=Per-device WireGuard activity logger
+Wants=wg-quick@wg0.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/wg-activity-log.sh

@@ -1,0 +1,80 @@
+{
+  "id": 3,
+  "panels": [
+    {
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "{job=\"wireguard\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "All Peer Activity",
+      "type": "logs"
+    },
+    {
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "targets": [
+        {
+          "expr": "{job=\"wireguard\", event=\"--- traffic summary ---\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "Traffic Summary",
+      "type": "logs"
+    },
+    {
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "targets": [
+        {
+          "expr": "{job=\"wireguard\", event=\"CONNECT\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "CONNECT Events",
+      "type": "logs"
+    },
+    {
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 28
+      },
+      "targets": [
+        {
+          "expr": "{job=\"wireguard\", event=\"DISCONNECT\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "DISCONNECT Events",
+      "type": "logs"
+    }
+  ],
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "title": "Client Traffic",
+  "uid": "client-traffic",
+  "version": 2
+}

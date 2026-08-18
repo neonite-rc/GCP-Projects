@@ -1,0 +1,177 @@
+#!/bin/bash
+# GENERATED — do not edit by hand. Edit src/scripts/startup.sh.tmpl and the
+# canonical sources (src/scripts/{lib,*.sh} and src/scripts/fragments/), then
+# run src/scripts/build-startup.sh. CI checks startup.sh is up to date.
+# Startup script: installs and configures WireGuard + security hardening.
+# Runs via GCE metadata_startup_script.
+#   - DuckDNS: always updates on boot (handles ephemeral IP changes)
+#   - WireGuard + hardening + tooling: first boot only (marker file)
+set -euo pipefail
+
+MARKER=/var/lib/wireguard-setup-done
+
+# --- Read metadata ---
+WG_PORT=$(curl -sf -H "Metadata-Flavor: Google" \
+  "http://metadata.google.internal/computeMetadata/v1/instance/attributes/wg-port") || WG_PORT=51820
+WG_CIDR=$(curl -sf -H "Metadata-Flavor: Google" \
+  "http://metadata.google.internal/computeMetadata/v1/instance/attributes/wg-cidr") || WG_CIDR=10.200.200.0/24
+
+WG_NET="${WG_CIDR%/*}"
+WG_PREFIX="${WG_CIDR#*/}"
+WG_SERVER_IP="${WG_NET%.*}.1/${WG_PREFIX}"
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get install -y -qq wireguard wireguard-tools ufw fail2ban unattended-upgrades qrencode
+
+# ===== ALWAYS-ON: DuckDNS dynamic DNS =====
+# Runs on every boot so the hostname always points to the current ephemeral IP.
+DUCKDNS_DOMAIN=$(curl -sf -H "Metadata-Flavor: Google" \
+  "http://metadata.google.internal/computeMetadata/v1/instance/attributes/duckdns-domain") || DUCKDNS_DOMAIN=""
+DUCKDNS_TOKEN=$(curl -sf -H "Metadata-Flavor: Google" \
+  "http://metadata.google.internal/computeMetadata/v1/instance/attributes/duckdns-token") || DUCKDNS_TOKEN=""
+
+if [ -n "$DUCKDNS_DOMAIN" ] && [ -n "$DUCKDNS_TOKEN" ]; then
+  cat > /etc/duckdns.env <<ENVEOF
+DUCKDNS_DOMAIN=${DUCKDNS_DOMAIN}
+DUCKDNS_TOKEN=${DUCKDNS_TOKEN}
+ENVEOF
+  chmod 600 /etc/duckdns.env
+
+  @@EMBED:duckns-update.sh:DUCKEOF:/usr/local/sbin/duckns-update.sh@@
+  chmod 700 /usr/local/sbin/duckns-update.sh
+
+  @@EMBED:fragments/duckns-update.service:DUCKSVCEOF:/etc/systemd/system/duckns-update.service@@
+
+  @@EMBED:fragments/duckns-update.timer:DUCKTIMEOF:/etc/systemd/system/duckns-update.timer@@
+
+  @@EMBED:fragments/duckns-update.logrotate:DUCKLOGRATEEOF:/etc/logrotate.d/duckns-update@@
+
+  systemctl daemon-reload
+  systemctl enable --now duckns-update.timer
+  /usr/local/sbin/duckns-update.sh || true
+  echo "DuckDNS configured: ${DUCKDNS_DOMAIN}.duckdns.org"
+else
+  echo "DuckDNS not configured (no domain/token in metadata)"
+fi
+
+# ===== FIRST-BOOT ONLY: WireGuard + hardening =====
+if [ -f "$MARKER" ]; then
+  echo "WireGuard already configured (marker exists). DuckDNS updated on boot."
+  exit 0
+fi
+
+# --- WireGuard server keys ---
+umask 077
+mkdir -p /etc/wireguard/clients
+if [ ! -f /etc/wireguard/server_private.key ]; then
+  wg genkey | tee /etc/wireguard/server_private.key | wg pubkey > /etc/wireguard/server_public.key
+fi
+SERVER_PRIV=$(cat /etc/wireguard/server_private.key)
+
+# --- Detect primary NIC for NAT ---
+NIC=$(ip -o -4 route show to default | awk '{print $5}')
+
+cat > /etc/wireguard/wg0.conf <<EOF
+[Interface]
+Address = ${WG_SERVER_IP}
+ListenPort = ${WG_PORT}
+PrivateKey = ${SERVER_PRIV}
+PostUp = iptables -A FORWARD -i wg0 -j ACCEPT; iptables -A FORWARD -o wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o ${NIC} -j MASQUERADE
+PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -D FORWARD -o wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o ${NIC} -j MASQUERADE
+EOF
+
+# --- IP forwarding ---
+cat > /etc/sysctl.d/99-wireguard.conf <<EOF
+net.ipv4.ip_forward = 1
+EOF
+sysctl --system
+
+systemctl enable --now wg-quick@wg0
+
+# --- Client tooling + peer store (single source of the peer schema) ---
+@@EMBED:lib/wg-peer-store.sh:LIBEOF:/usr/local/sbin/wg-peer-store.sh@@
+chmod 700 /usr/local/sbin/wg-peer-store.sh
+
+@@EMBED:add-client.sh:ADDCLIENTEOF:/usr/local/sbin/add-client.sh@@
+chmod 700 /usr/local/sbin/add-client.sh
+
+@@EMBED:remove-client.sh:REMOVECLIENTEOF:/usr/local/sbin/remove-client.sh@@
+chmod 700 /usr/local/sbin/remove-client.sh
+
+@@EMBED:wg-keepalive.sh:KEEPALIVEEOF:/usr/local/sbin/wg-keepalive.sh@@
+chmod 700 /usr/local/sbin/wg-keepalive.sh
+
+@@EMBED:fragments/wg-keepalive.service:KEEPALIVESVCEOF:/etc/systemd/system/wg-keepalive.service@@
+
+systemctl daemon-reload
+systemctl enable --now wg-keepalive
+
+# --- Hardening: SSH keys only ---
+sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+systemctl restart ssh
+
+# --- Hardening: UFW (host-level defense in depth) ---
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow 22/tcp comment 'SSH (cloud firewall restricts source)'
+ufw allow "${WG_PORT}/udp" comment 'WireGuard'
+ufw route allow in on wg0
+ufw --force enable
+
+# --- Hardening: fail2ban ---
+cat > /etc/fail2ban/jail.local <<EOF
+[sshd]
+enabled = true
+backend = systemd
+maxretry = 3
+bantime = 1h
+findtime = 10m
+EOF
+systemctl enable --now fail2ban
+
+# --- Hardening: automatic security updates ---
+cat > /etc/apt/apt.conf.d/20auto-upgrades <<EOF
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+EOF
+
+# --- Activity logger: per-device CONNECT/DISCONNECT + traffic summary ---
+@@EMBED:wg-activity-log.sh:WGACTEOF:/usr/local/sbin/wg-activity-log.sh@@
+chmod 700 /usr/local/sbin/wg-activity-log.sh
+
+@@EMBED:fragments/wg-activity.service:WGACTSVCEOF:/etc/systemd/system/wg-activity.service@@
+
+@@EMBED:fragments/wg-activity.timer:WGACTTIMEOF:/etc/systemd/system/wg-activity.timer@@
+
+@@EMBED:fragments/wg-activity.logrotate:WGACTLOGRATEEOF:/etc/logrotate.d/wg-activity@@
+
+systemctl daemon-reload
+systemctl enable --now wg-activity.timer
+
+# ===== Tailscale (always-on, runs on every boot) =====
+if ! command -v tailscale &>/dev/null; then
+  curl -fsSL https://tailscale.com/install.sh | sh
+fi
+
+# Read Tailscale auth key from metadata (optional — if set, auto-authenticates)
+TS_AUTHKEY=$(curl -sf -H "Metadata-Flavor: Google" \
+  "http://metadata.google.internal/computeMetadata/v1/instance/attributes/ts-authkey" 2>/dev/null || echo "")
+
+TS_STATE=$(tailscale status --json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('BackendState',''))" 2>/dev/null || echo "")
+
+if [ "$TS_STATE" != "Running" ]; then
+  if [ -n "$TS_AUTHKEY" ]; then
+    tailscale up --authkey="$TS_AUTHKEY" --advertise-exit-node --reset
+  else
+    # Auth URL printed to serial console for manual auth
+    tailscale up --advertise-exit-node --reset 2>&1 | tee /dev/ttyS0 || true
+  fi
+  echo "Tailscale started"
+else
+  echo "Tailscale already running"
+fi
+
+touch "$MARKER"
+echo "WireGuard setup complete. Public key: $(cat /etc/wireguard/server_public.key)"

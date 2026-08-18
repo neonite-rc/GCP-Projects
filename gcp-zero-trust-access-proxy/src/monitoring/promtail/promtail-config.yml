@@ -1,0 +1,83 @@
+server:
+  http_listen_port: 9080
+
+positions:
+  filename: /run/promtail/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # WireGuard activity log
+  - job_name: wireguard
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: wireguard
+          host: gcp-vpn
+          __path__: /var/log/wg-activity.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC)\s+(?P<event>CONNECT|DISCONNECT|--- traffic summary ---)\s*(?P<client>\S+)?'
+      - labels:
+          event:
+          client:
+      - timestamp:
+          source: timestamp
+          format: "2006-01-02 15:04:05 UTC"
+
+  # Tailscale logs (from syslog)
+  - job_name: tailscale
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: tailscale
+          host: gcp-vpn
+          __path__: /var/log/syslog
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\w{3}\s+\d+\s+\d{2}:\d{2}:\d{2})\s+\S+\s+tailscaled\[\d+\]:\s+(?P<rest>.+)'
+      - timestamp:
+          source: timestamp
+          format: "Jan _2 15:04:05"
+      - regex:
+          expression: '^(?P<component>\w+):(?P<message>.+)'
+          source: rest
+      - labels:
+          component:
+
+  # System syslog (non-Tailscale)
+  - job_name: syslog
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: syslog
+          host: gcp-vpn
+          __path__: /var/log/syslog
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\w{3}\s+\d+\s+\d{2}:\d{2}:\d{2})\s+\S+\s+(?P<service>\S+?)(\[\d+\])?:\s+(?P<message>.+)'
+      - labels:
+          service:
+      - drop:
+          expression: ".*tailscaled.*"
+
+  # Docker containers
+  - job_name: docker
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: docker
+          host: gcp-vpn
+          __path__: /var/lib/docker/containers/*/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            log: log
+            stream: stream
+      - labels:
+          stream:

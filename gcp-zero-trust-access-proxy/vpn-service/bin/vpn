@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# vpn — on-demand GCP VPN service manager
+# Usage: vpn <command> [args]
+set -euo pipefail
+
+VPN_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
+# shellcheck source=lib/core.sh
+source "$VPN_LIB/core.sh"
+# shellcheck source=lib/gcp.sh
+source "$VPN_LIB/gcp.sh"
+# shellcheck source=lib/tailscale.sh
+source "$VPN_LIB/tailscale.sh"
+# shellcheck source=lib/display.sh
+source "$VPN_LIB/display.sh"
+# shellcheck source=lib/commands.sh
+source "$VPN_LIB/commands.sh"
+
+CMD="${1:-status}"
+shift || true
+
+case "$CMD" in
+  up)              cmd_up "$@" ;;
+  down)            cmd_down "$@" ;;
+  switch)          cmd_switch "$@" ;;
+  status|st)       cmd_status ;;
+  regions|ls)      cmd_regions ;;
+  connect)         cmd_connect "$@" ;;
+  logs)            cmd_logs ;;
+  schedule-down|sched) cmd_schedule_down "${1:-20}" ;;
+  cancel-down)     cmd_cancel_down ;;
+  help|-h|--help)  cmd_help ;;
+  *)
+    err "Unknown command: $CMD"
+    echo "Run 'vpn help' for usage."
+    exit 1
+    ;;
+esac
