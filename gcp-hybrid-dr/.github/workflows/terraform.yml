@@ -50,7 +50,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Trivy IaC misconfiguration scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.33.0
         with:
           scan-type: config
           scan-ref: ${{ github.action_path }}/../../terraform
