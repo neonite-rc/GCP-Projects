@@ -1,0 +1,93 @@
+name: Portfolio CI
+
+# Root-level workflow for the monorepo.
+#
+# GitHub only registers workflows in the repository's ROOT
+# `.github/workflows/` directory. A workflow file inside
+# `gcp-hybrid-dr/.github/workflows/` is treated as a project file and
+# never runs — which is why the sibling project had no CI history at
+# all. This workflow runs each project's checks from the root and
+# scopes them with `working-directory`.
+#
+# Each project keeps its own workflow file too, so it still works when
+# the project is cloned standalone.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "gcp-hybrid-dr/**"
+      - "gcp-zero-trust-access-proxy/**"
+      - ".github/workflows/portfolio-ci.yml"
+  pull_request:
+    paths:
+      - "gcp-hybrid-dr/**"
+      - "gcp-zero-trust-access-proxy/**"
+      - ".github/workflows/portfolio-ci.yml"
+
+jobs:
+  hybrid-dr:
+    name: gcp-hybrid-dr
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gcp-hybrid-dr
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.*"
+
+      - name: Terraform fmt
+        working-directory: gcp-hybrid-dr/terraform
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init (no backend)
+        working-directory: gcp-hybrid-dr/terraform
+        run: terraform init -backend=false
+
+      - name: Terraform validate
+        working-directory: gcp-hybrid-dr/terraform
+        run: terraform validate
+
+      - name: Trivy IaC misconfiguration scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: gcp-hybrid-dr/terraform
+          severity: MEDIUM,HIGH,CRITICAL
+          exit-code: "1"
+
+      - name: ShellCheck
+        run: |
+          shellcheck src/scripts/*.sh
+          for f in src/scripts/*.sh; do bash -n "$f"; done
+
+      - name: Ruff lint
+        run: |
+          pip install ruff
+          ruff check src/ tests/
+
+      - name: Unit tests
+        run: |
+          pip install -r requirements-dev.txt
+          pytest tests/ -v --tb=short
+
+      - name: Architecture diagram is in sync with its SVG source
+        run: |
+          if ! command -v magick >/dev/null && ! command -v convert >/dev/null; then
+            echo "imagemagick not available; skipping render check"
+            exit 0
+          fi
+          if command -v magick >/dev/null; then
+            magick -background white assets/architecture.svg /tmp/arch.png
+          else
+            convert -background white assets/architecture.svg /tmp/arch.png
+          fi
+          if ! compare -metric AE assets/architecture.png /tmp/arch.png null: 2>&1 | grep -qE '^0$'; then
+            echo "::error::assets/architecture.png is out of date with assets/architecture.svg"
+            echo "Regenerate it with: magick -background white assets/architecture.svg assets/architecture.png"
+            exit 1
+          fi
+          echo "architecture.png is in sync with architecture.svg"
