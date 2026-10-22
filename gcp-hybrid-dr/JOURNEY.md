@@ -703,3 +703,165 @@ two things I can only claim."
     Every "this would be better with…" improvement in a portfolio
     project has to be weighed against the budget it consumes and the
     time it takes from the things you *have* measured.
+17. **Publish it.** Not because publishing is the goal — because a
+    second machine with a fresh install and a different version of
+    everything is the only thing that can find the difference between
+    your code and your assumptions about it. Every Day 11 finding was
+    an environment, not a bug in the source.
+18. **A tool whose defaults can change is not a gate.** Declare the
+    rule set, pin the version, and treat "my machine says it is clean"
+    as a claim about your machine.
+19. **The local environment is a cache, not a specification.** What is
+    actually specified is `requirements-dev.txt`; only an environment
+    built from the specification tests it.
+20. **Ask "what makes this change take effect?"** For a while the
+    honest answer was "nothing does". The gap was not a bug — it was
+    an operation nobody had written down.
+21. **A "measured" table is still an estimate if nobody checked it.**
+    The runtime table said Python 3.12; the VM runs 3.11.2. Reading
+    the number off a design document is not the same as measuring it,
+    and in a project whose whole pitch is measurement, that is the one
+    table that must be right.
+
+---
+
+## Day 11: Publishing it — and what the CI found that the local machine could not
+
+The project had been deployed, drilled and documented for two days. On
+Day 11 it went to GitHub, and the first thing that happened was that
+the CI caught five things I had not.
+
+### The monorepo trap
+
+The portfolio is one GitHub repository with each project in a
+directory. The sibling project had a complete CI definition at
+`gcp-zero-trust-access-proxy/.github/workflows/terraform.yml`.
+
+**It had never run. Once.** The repository's entire run history was
+Dependabot's graph update.
+
+The reason is a fact about GitHub I had not known: **only workflows in
+a repository's ROOT `.github/workflows/` are registered.** A workflow
+inside a nested directory is treated as an ordinary project file. It
+does not error, it does not warn, it simply never runs — so a project
+with a full CI configuration can sit there looking tested and be
+completely untested.
+
+The fix is a root-level workflow that runs each project's checks with
+the working directory scoped to it. The standalone project workflows
+stay, so each project still works when cloned on its own — and they use
+`github.action_path` to find their own directory, which resolves
+correctly in both layouts.
+
+### The linter that disagreed with me
+
+Next failure: local ruff said the code was clean; CI's ruff reported
+**11 errors on the same code**. The newer version flags
+`datetime.timezone.utc` → `datetime.UTC` once the target version is
+3.11+.
+
+The wrong reaction is to "fix" the code. The right reaction is to ask
+why two machines with the same source tree disagree — and the answer
+is that they were running different tools.
+
+So the rule set is now declared in `pyproject.toml` (explicitly, with
+`target-version = "py310"` — the app runs on the VM's Debian 12 system
+Python, and a lint rule must not raise the app's runtime floor for a
+style preference), and the version is pinned in
+`requirements-dev.txt`. A linter whose defaults can change under you
+cannot be a gate.
+
+### The dependency that was not there
+
+`google-cloud-kms` was missing from `requirements-dev.txt`. The local
+virtualenv had it from an ad-hoc install months earlier, so the local
+suite passed. A clean install failed three tests with
+`ImportError: cannot import name 'kms' from 'google.cloud'`.
+
+CI installs `requirements-dev.txt` from nothing, so CI would have
+failed on it too.
+
+**The local environment is a cache, not a specification.** The
+specification is `requirements-dev.txt`, and only an environment built
+from the specification actually tests it. I now build a throwaway
+venv from it before every commit.
+
+### The bytecodes in the deployment package
+
+And then the one that had been quietly there the whole time.
+`archive_file` zips the whole function source directory — and running
+the test suite leaves `__pycache__/*.pyc` behind in it. So:
+
+- the package hash changed after **every local test run**, and
+  `terraform plan` wanted to redeploy all four functions
+- the deployed package was carrying bytecode compiled by my local
+  Python 3.13 into a `python312` runtime
+
+The "no drift" property I had been quoting was only ever true until
+someone ran `pytest`. The symptom is a diff that looks like a source
+change, so the natural reaction is to go looking for an edit that is
+not there.
+
+### The operation that did not exist
+
+I also asked a question I had never asked: *if I change `src/app/app.py`,
+what makes the running VM pick it up?*
+
+The answer was: nothing does. The code is delivered through instance
+metadata and fetched once at first boot. `terraform apply` updates the
+metadata and the VM keeps running the old code. Restarting the VM does
+not help, because the provisioning marker makes `startup.sh` exit
+immediately. `terraform destroy` "works" — and takes the database and
+the public IP with it.
+
+That is a gap in the operations rather than in the design, and it was
+found by asking the question rather than by a failure. `scripts/redeploy.sh`
+now ships a change: fetch → validate (`py_compile`, `bash -n`,
+`nginx -t`) → install → restart → poll `/health` → roll back if it does
+not come back. The previous files are snapshotted *before* anything is
+installed, because "rolling back" by re-fetching from the metadata
+server would just fetch the same broken code again.
+
+I verified it live in both directions — shipping a real change, and
+shipping a *runtime-only* failure, which is the case a syntax check
+cannot see. The site was serving again within seconds and the failover
+chain never fired.
+
+### The two things I had written down wrongly
+
+- The README claimed "Python 3.12 + nginx 1.27" for the primary. The
+  live VM runs **Python 3.11.2**, Flask 2.2.2, Gunicorn 20.1.0 and
+  nginx **1.22.1** — all from Debian 12's apt. In a project whose
+  pitch is "measured, not estimated", the runtime table is not allowed
+  to be an estimate.
+- `default-allow-rdp` (tcp:3389 from `0.0.0.0/0`) was still enabled
+  while SSH had been disabled. Nothing on the VM listens on 3389, so it
+  is a latent exposure rather than an active one — but disabling SSH
+  and leaving RDP open is exactly the half-finished hardening a
+  security review is designed to catch.
+
+### The check that keeps the docs honest
+
+The documentation consistency check used to be a throwaway script. It
+is now `scripts/audit-docs.py`, wired into CI: it checks that every
+headline claim is written down, that a superseded figure appears only
+in a passage framing it as history, that every link resolves, that
+every document is reachable from the README, and that a number quoted
+in several documents is the *same* number in all of them.
+
+It found four real inconsistencies the first time it ran, including
+two runbook links pointing at `docs/docs/...`.
+
+**A check nobody runs is a check that rots**, so it is in CI.
+
+### The lesson
+
+Day 9's lesson was "an audit finds what pride misses". Day 10: "a
+deployment finds what hopefulness misses". Day 11: **publishing it
+finds what your own machine cannot see.**
+
+Every finding on Day 11 was a difference between two environments that
+had never been compared. The code was fine; the *toolchain* was
+assumed. It took a second machine with a fresh install and a different
+version of everything to say so.
+

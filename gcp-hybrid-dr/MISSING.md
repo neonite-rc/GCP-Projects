@@ -2,7 +2,9 @@
 
 > Audit date: 2026-08-17 · updated 2026-08-21 · enhancement pass 2026-08-24
 > · **live deployment pass 2026-10-21** · **final scope pass 2026-10-21**
+> · **publication and CI pass 2026-10-22**
 > Cross-reference: `/var/home/ansh/Projects/GCP/PORTFOLIO_AUDIT.md`
+> Published at: `github.com/neonite-rc/GCP-Projects/gcp-hybrid-dr`
 
 ---
 
@@ -25,12 +27,20 @@ live deployment are closed as follows:
 
 | Item | Outcome |
 |------|---------|
-| Screen recording | 📸 **The only remaining human task.** Everything it would show now exists, is measured, and is verified. It is a capture, not a build. |
+| Screen recording | 📸 **The only remaining human task.** Everything it would show now exists, is measured, and is verified. It is a capture, not a build. [docs/07-screenshot-runbook.md](docs/07-screenshot-runbook.md) is a shot list for it. |
 | Cross-project backup replica | ⏭️ **Deliberately skipped, by decision, for budget reasons.** The design is written down and the in-project protections that ship instead are documented and verified. |
 
 Nothing else is outstanding. Every other capability in the plan is
 built, deployed, running, and measured — see
 [docs/06-measurements.md](docs/06-measurements.md).
+
+**Published and continuously verified.** The project is on GitHub with
+CI running on every push: Terraform fmt/validate, a Trivy IaC scan
+(0 misconfigurations), ShellCheck, ruff, **87 unit tests**, a
+documentation audit, and a diagram-sync check. The CI is not decoration
+— it found five real problems on the day it was switched on, including
+a deployment package carrying local bytecode, a missing test
+dependency, and an unpinned linter that disagreed with my own machine.
 
 ---
 
