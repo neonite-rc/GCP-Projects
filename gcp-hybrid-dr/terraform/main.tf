@@ -39,11 +39,12 @@ locals {
   ]
 
   # File contents delivered via instance metadata (single source of truth)
-  app_py         = file("${path.module}/../src/app/app.py")
-  nginx_conf     = file("${path.module}/../src/app/nginx-app.conf")
-  backup_script  = file("${path.module}/../src/scripts/backup.sh")
-  verify_script  = file("${path.module}/../src/scripts/verify-backup.sh")
-  startup_script = file("${path.module}/../src/scripts/startup.sh")
+  app_py          = file("${path.module}/../src/app/app.py")
+  nginx_conf      = file("${path.module}/../src/app/nginx-app.conf")
+  backup_script   = file("${path.module}/../src/scripts/backup.sh")
+  verify_script   = file("${path.module}/../src/scripts/verify-backup.sh")
+  startup_script  = file("${path.module}/../src/scripts/startup.sh")
+  redeploy_script = file("${path.module}/../src/scripts/redeploy.sh")
 }
 
 resource "google_project_service" "required" {
@@ -74,6 +75,7 @@ module "primary" {
   nginx_conf         = local.nginx_conf
   backup_script      = local.backup_script
   verify_script      = local.verify_script
+  redeploy_script    = local.redeploy_script
   backup_bucket_name = module.backup.backup_bucket_name
   backup_cron        = var.backup_cron
   labels             = var.labels

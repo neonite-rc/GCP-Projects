@@ -236,8 +236,12 @@ resource "google_compute_instance" "primary" {
     nginx-conf    = var.nginx_conf
     backup-script = var.backup_script
     verify-script = var.verify_script
-    backup-bucket = var.backup_bucket_name
-    backup-cron   = var.backup_cron
+    # The redeploy script is delivered through the same channel as the
+    # code it deploys, so the script that runs is always the one in the
+    # repository. scripts/redeploy.sh fetches it from here.
+    redeploy-script = var.redeploy_script
+    backup-bucket   = var.backup_bucket_name
+    backup-cron     = var.backup_cron
   }
 
   metadata_startup_script = var.startup_script

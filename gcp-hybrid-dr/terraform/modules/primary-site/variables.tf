@@ -78,6 +78,19 @@ variable "verify_script" {
   type        = string
 }
 
+variable "redeploy_script" {
+  description = <<-EOT
+    Contents of redeploy.sh, delivered via instance metadata.
+
+    The primary's code is fetched from the metadata server once at first
+    boot, so a code change in src/ does not reach the running VM by
+    itself. This script is the missing operation: it re-fetches the
+    current code, validates it, installs it, and restarts the service,
+    rolling back if the app does not come back.
+  EOT
+  type        = string
+}
+
 variable "backup_bucket_name" {
   description = "Name of the GCS backup bucket the VM writes nightly backups to"
   type        = string

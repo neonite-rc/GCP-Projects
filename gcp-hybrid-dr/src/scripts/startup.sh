@@ -55,6 +55,15 @@ fetch_meta backup-script >/opt/dr/backup.sh
 fetch_meta verify-script >/opt/dr/verify-backup.sh
 chmod 0750 /opt/dr/backup.sh /opt/dr/verify-backup.sh
 
+# --- Redeploy tooling -------------------------------------------------------
+# The redeploy script is also what a later code change uses to roll out
+# new code, so it is installed at first boot too. scripts/redeploy.sh
+# normally fetches it from the metadata server directly, but having a
+# copy on the VM means it can also be run by hand:
+#     sudo /opt/dr/redeploy.sh --check
+fetch_meta redeploy-script >/opt/dr/redeploy.sh
+chmod 0750 /opt/dr/redeploy.sh
+
 BACKUP_BUCKET="$(fetch_meta backup-bucket)"
 BACKUP_CRON="$(fetch_meta backup-cron)"
 # Sanity-check the schedule before it becomes a cron file (a malformed

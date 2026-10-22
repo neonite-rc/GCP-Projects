@@ -329,6 +329,22 @@ data "archive_file" "function_source" {
   type        = "zip"
   source_dir  = var.function_source_dir
   output_path = "${path.module}/build/backup-trigger.zip"
+  # Exclude compiled bytecode.
+  #
+  # `archive_file` zips the WHOLE source directory, and running the
+  # test suite leaves __pycache__/*.pyc behind in it. Two things go
+  # wrong if those are shipped:
+  #
+  #   1. The package hash changes every time the tests run, so
+  #      `terraform plan` wants to redeploy all four functions after
+  #      every local test run. The "no drift" property was only ever
+  #      true until someone ran pytest.
+  #   2. The deployed package carries bytecode compiled by the LOCAL
+  #      Python (3.13) into a runtime that is python312. It is dead
+  #      weight at best and the wrong interpreter's bytecode at worst.
+  #
+  # The fix is to keep build artefacts out of the deployment package.
+  excludes = ["__pycache__", "*.pyc"]
 }
 
 resource "google_storage_bucket" "function_source" {
@@ -446,6 +462,22 @@ data "archive_file" "drill_source" {
   type        = "zip"
   source_dir  = var.drill_source_dir
   output_path = "${path.module}/build/restore-drill.zip"
+  # Exclude compiled bytecode.
+  #
+  # `archive_file` zips the WHOLE source directory, and running the
+  # test suite leaves __pycache__/*.pyc behind in it. Two things go
+  # wrong if those are shipped:
+  #
+  #   1. The package hash changes every time the tests run, so
+  #      `terraform plan` wants to redeploy all four functions after
+  #      every local test run. The "no drift" property was only ever
+  #      true until someone ran pytest.
+  #   2. The deployed package carries bytecode compiled by the LOCAL
+  #      Python (3.13) into a runtime that is python312. It is dead
+  #      weight at best and the wrong interpreter's bytecode at worst.
+  #
+  # The fix is to keep build artefacts out of the deployment package.
+  excludes = ["__pycache__", "*.pyc"]
 }
 
 resource "google_storage_bucket_object" "drill_source" {
@@ -557,6 +589,22 @@ data "archive_file" "retirement_source" {
   type        = "zip"
   source_dir  = var.retirement_source_dir
   output_path = "${path.module}/build/key-version-retirement.zip"
+  # Exclude compiled bytecode.
+  #
+  # `archive_file` zips the WHOLE source directory, and running the
+  # test suite leaves __pycache__/*.pyc behind in it. Two things go
+  # wrong if those are shipped:
+  #
+  #   1. The package hash changes every time the tests run, so
+  #      `terraform plan` wants to redeploy all four functions after
+  #      every local test run. The "no drift" property was only ever
+  #      true until someone ran pytest.
+  #   2. The deployed package carries bytecode compiled by the LOCAL
+  #      Python (3.13) into a runtime that is python312. It is dead
+  #      weight at best and the wrong interpreter's bytecode at worst.
+  #
+  # The fix is to keep build artefacts out of the deployment package.
+  excludes = ["__pycache__", "*.pyc"]
 }
 
 resource "google_storage_bucket_object" "retirement_source" {

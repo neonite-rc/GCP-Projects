@@ -162,8 +162,8 @@ Full details: [docs/01-architecture.md](docs/01-architecture.md)
 | App runtime | **Measured on the live VM**: Python 3.11.2 + Flask 2.2.2 + Gunicorn 20.1.0 (primary, from Debian 12's apt), nginx 1.22.1 (reverse proxy). The DR maintenance page is nginx 1.27-alpine (container). The Cloud Functions are `python312`. |
 | Backup | SQLite online backup API (safe while app serves traffic), gzip, sha256 checksums, Cloud Storage JSON API upload with `x-goog-hash: crc32c` (CRC32C validated) |
 | IaC | Terraform >= 1.9 (the floor is set by the `import` block that adopts GCP's default firewall rules — import blocks are root-module only), hashicorp/google ~> 5.0, remote state in versioned GCS, 4 modules (`primary-site`, `backup`, `dr-site`, `dns`), validation blocks rejecting unsafe inputs |
-| CI | GitHub Actions: terraform fmt/validate, Trivy IaC scan, ShellCheck, **pytest (74 tests)**, ruff (version pinned — see [requirements-dev.txt](requirements-dev.txt)), diagram-sync check |
-| Tests | 74 unit tests over all four Cloud Functions, the Flask app, the shell backup pipeline and the drill's DNS/probe helpers — including a real SQLite→gzip→sha256→upload round trip against a stub GCS that **validates the CRC32C exactly as Cloud Storage does** |
+| CI | GitHub Actions: terraform fmt/validate, Trivy IaC scan, ShellCheck, **pytest (87 tests)**, ruff (version pinned — see [requirements-dev.txt](requirements-dev.txt)), diagram-sync check |
+| Tests | 87 unit tests over all four Cloud Functions, the Flask app, the shell backup pipeline and the drill's DNS/probe helpers — including a real SQLite→gzip→sha256→upload round trip against a stub GCS that **validates the CRC32C exactly as Cloud Storage does** |
 
 ## Cost Analysis
 
@@ -314,12 +314,43 @@ bash ../src/scripts/verify-backup.sh $(terraform output -raw backup_bucket)
 
 Tear down: `terraform destroy`
 
+### Shipping a code change to the primary site
+
+The primary's code (the app, the nginx config, the backup scripts) is
+delivered through instance metadata and fetched once at first boot, so
+`src/` is the single source of truth. That has a sharp edge worth
+knowing about: **a change in `src/` does not reach the running VM by
+itself.** `terraform apply` updates the metadata, but the VM keeps
+running the old code — and restarting it does not help either, because
+the provisioning marker makes `startup.sh` exit immediately.
+
+`scripts/redeploy.sh` is the missing operation:
+
+```bash
+# What would change?
+scripts/redeploy.sh --check
+
+# Ship it
+scripts/redeploy.sh
+```
+
+It re-fetches the current code from the metadata server, checks it
+(`py_compile`, `bash -n`, `nginx -t`), installs it, restarts the
+service, and polls `/health`. If the app does not come back, the
+previous version is restored. The database is never touched.
+
+The script it runs is itself fetched from the metadata server, so
+there is exactly one copy of it and it is always the one in the
+repository. If your public IP has changed — it usually has, if you are
+on a residential connection — the wrapper says so and tells you the
+`terraform apply` that fixes it, rather than timing out mysteriously.
+
 ## Scope — what's done, and what isn't
 
 **Done and verified on live infrastructure:** automated backup with
 write-only IAM and a validated CRC32C, cross-region replication, weekly
 automatic restore drills, RPO monitoring, alert-driven DNS failover, a
-DR-posture dashboard, 74 unit tests, and RPO/RTO measured across three
+DR-posture dashboard, 87 unit tests, and RPO/RTO measured across three
 real outages.
 
 **Two things are deliberately not in the build:**
@@ -339,7 +370,7 @@ Nothing else is outstanding.
 | [docs/02-cost-analysis.md](docs/02-cost-analysis.md) | Every cost line, with the arithmetic shown |
 | [docs/03-security.md](docs/03-security.md) | IAM, the integrity chain, and the threat model — including where it stops |
 | [docs/04-scaling.md](docs/04-scaling.md) | Where the RTO actually goes, and the scaling paths |
-| [docs/05-troubleshooting.md](docs/05-troubleshooting.md) | 11 real incidents with the exact error each produces |
+| [docs/05-troubleshooting.md](docs/05-troubleshooting.md) | 12 real incidents with the exact error each produces |
 | [docs/06-measurements.md](docs/06-measurements.md) | The measured run, the arithmetic, and the 32 bugs the deployment found |
 | [docs/07-screenshot-runbook.md](docs/07-screenshot-runbook.md) | Step-by-step: what to capture, exactly how, and why each shot matters |
 | [JOURNEY.md](JOURNEY.md) | 10 days of decisions, dead ends, and the mistakes |

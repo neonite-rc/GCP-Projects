@@ -516,7 +516,7 @@ the code, because the code was internally consistent — it just wasn't
 consistent with how the platform actually behaves.
 
 The most valuable thing I wrote that day was not Terraform. It was the
-test suite: 74 unit tests that pinned the log-message contract the
+test suite: 87 unit tests that pinned the log-message contract the
 alerts filter on, the checksum chain, and the failover state machine.
 They caught two bugs (the object-name collision and the `--help` exit
 code) before the deployment ever ran.

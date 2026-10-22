@@ -560,6 +560,8 @@ code review had:
 | 30 | An `import` block inside a child module fails `terraform init` ("Import blocks are only allowed in the root module") | Moved to `terraform/imports.tf`; the Terraform floor raised to `>= 1.9.0` |
 | 31 | The security-logs bucket had no object versioning — the last bucket in the project without it (found by Trivy once the scanner worked) | Versioning enabled, with the noncurrent-version cleanup that stops the bucket growing forever |
 | 32 | **GitHub only registers workflows in a repository's ROOT `.github/workflows/`.** The sibling project's CI had therefore never run once — the repo's entire run history was Dependabot's graph update | A root-level `portfolio-ci.yml` runs each project's checks with the working directory scoped. Each project keeps its own workflow so it still works when cloned standalone |
+| 33 | `archive_file` zipped the WHOLE function source directory, so the `__pycache__/*.pyc` left behind by the test suite was shipped inside the deployment package. Two consequences: the package hash changed after **every local test run** (so `terraform plan` wanted to redeploy all four functions), and the deployed package carried bytecode compiled by the local Python 3.13 into a `python312` runtime | `excludes = ["__pycache__", "*.pyc"]` on all four `archive_file` sources. Verified: running the test suite no longer produces a diff |
+| 34 | **A code change in `src/` did not reach the running VM.** The code is delivered through instance metadata and fetched once at first boot; the provisioning marker means `startup.sh` never re-runs, so `terraform apply` changed the metadata and nothing else | `scripts/redeploy.sh` + `src/scripts/redeploy.sh`: re-fetch, validate, install, restart, poll `/health`, roll back if it does not come back. 13 unit tests, and verified live by shipping a change and by breaking the app on purpose |
 
 A fourteenth class of bug was in the **drill script** rather than the
 platform: its resolver and probe logic was wrong four separate ways
@@ -681,7 +683,84 @@ Trivy reports **0 misconfigurations** across all four modules. The
 `default-allow-rdp` finding and the security-logs versioning finding
 were both Trivy's, and both are fixed.
 
-### 13.5 The same lesson, fifth time
+### 13.5 The redeploy gap — the operation that did not exist
+
+Finding 34 is worth its own section, because it is the one gap a
+reviewer is most likely to hit: **the repository was not the thing
+running.**
+
+The primary's code is delivered through instance metadata, and
+`startup.sh` fetches it once at first boot. The design is good — `src/`
+is the single source of truth, and the VM is built by a script that
+fetches what it needs rather than carrying copies. But it has a sharp
+edge, and every obvious response to it is wrong:
+
+| You change `src/app/app.py` and… | What happens |
+|---|---|
+| `terraform apply` | The **metadata** is updated. The VM keeps running the old code. |
+| Restart the VM | `startup.sh` sees the provisioning marker and exits. The VM still runs the old code. |
+| `terraform destroy` + apply | "Works" — and the database is gone, the public IP changed, and every backup reference in the docs moved. |
+
+So the honest answer to "how do I ship a change?" was "you cannot,
+without rebuilding the VM". That is a gap in the operations, not in the
+design, and it was found by asking the question rather than by a
+failure.
+
+`scripts/redeploy.sh` closes it:
+
+1. Check that the firewall still allows *your* IP (a residential IP
+   changes; the rule is admin-IP-only). If it does not, say so and
+   print the `terraform apply` that fixes it — rather than timing out
+   mysteriously.
+2. Check that the instance metadata matches the repository, so a
+   redeploy cannot silently ship the old code.
+3. Run the remote script, which is **fetched from the metadata server**
+   — so there is exactly one copy of it, and it is always the one in
+   the repository.
+4. The remote script stages every file, checks it (`py_compile`,
+   `bash -n`, `nginx -t`), installs it, restarts the service, and polls
+   `/health`.
+5. If the app does not come back, the **previous** version is restored.
+   (Rolling back by re-fetching from the metadata server would just
+   fetch the same broken code again — which is why the previous files
+   are snapshotted before anything is installed.)
+
+Verified live, both directions:
+
+```
+# shipping a real change
+$ scripts/redeploy.sh
+[redeploy]   app.py: CHANGED
+[redeploy] installing
+[redeploy] restarting the app
+[redeploy] done -- the new code is live and serving
+{"host":"dr-demo-primary","site":"primary","status":"ok",...}
+
+$ ssh dr-demo-primary 'grep -n redeploy-loop-proof /opt/dr/app.py'
+103:    # redeploy-loop-proof: this line only exists to prove that a code
+```
+
+```
+# shipping broken code
+$ scripts/redeploy.sh
+[redeploy] all checks passed          <- a syntax check cannot see this
+[redeploy] the app did not come back -- rolling back to the previous version
+[redeploy] ERROR: deploy failed and was rolled back.
+
+$ curl http://34.23.59.120/health
+{"host":"dr-demo-primary","site":"primary","status":"ok",...}
+```
+
+The broken case was a *runtime* failure, not a syntax error, on
+purpose: a syntax error is caught before anything is installed, and a
+runtime failure is the one that needs the rollback. The site was
+serving again within seconds and the failover chain never fired.
+
+Thirteen unit tests pin the safety properties, because a script that
+can take the site down is the one script in the project that most
+needs them.
+
+### 13.6 The same lesson, fifth time
 
 The pattern in this project has now repeated enough times to be worth
 stating as a rule:

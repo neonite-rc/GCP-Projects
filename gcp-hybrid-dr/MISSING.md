@@ -308,7 +308,7 @@ reading it. Details and the full list of 32 bugs:
   chain, and the RPO with the hourly cadence actually used.
 
 ### The project has tests
-- **Now:** 74 unit tests over all three Cloud Functions, the Flask app, the shell backup
+- **Now:** 87 unit tests over all four Cloud Functions, the Flask app, the shell backup
   pipeline, including a real SQLite → gzip → sha256 → upload round trip
   against a stubbed GCS. They caught two real bugs before the deployment
   ever ran (same-second object-name collision; `--help` exiting 2).
@@ -343,6 +343,6 @@ reading it. Details and the full list of 32 bugs:
 - Weekly automated restore drill: download → sha256 → integrity_check → alert on failure
 - Terraform modules: `primary-site`, `backup`, `dr-site`, `dns`
 - GitHub Actions CI: fmt, validate, Trivy, ShellCheck, **pytest**, ruff
-- 74 unit tests over the functions, the app, the backup pipeline and the drill's DNS/probe helpers
+- 87 unit tests over the functions, the app, the backup pipeline, the drill's DNS/probe helpers
 - All 5 `docs/` files + `docs/06-measurements.md`
 - JOURNEY.md (10 days, options matrices, FinOps day, hardening passes, deployment day)

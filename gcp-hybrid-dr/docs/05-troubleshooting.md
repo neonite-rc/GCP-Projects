@@ -279,7 +279,17 @@ running the old one.
 script is delivered via instance metadata and only fetched on FIRST
 boot.
 
-**Fix:** re-fetch it from the metadata server (or recreate the VM):
+**Fix:** use the redeploy script, which does the whole job safely
+(fetch → validate → install → restart → verify → roll back on failure):
+
+```bash
+# From the repository root
+scripts/redeploy.sh            # ship it
+scripts/redeploy.sh --check    # just report what would change
+```
+
+If you would rather do it by hand, re-fetch it from the metadata
+server:
 
 ```bash
 META="http://metadata.google.internal/computeMetadata/v1/instance/attributes"
@@ -287,6 +297,41 @@ sudo curl -fsS -H "Metadata-Flavor: Google" "${META}/backup-script" \
   | sudo tee /opt/dr/backup.sh > /dev/null
 sudo chmod 0750 /opt/dr/backup.sh
 ```
+
+**This applies to the app and the nginx config too, not just the shell
+scripts.** `terraform apply` updates the metadata; it does not change
+what the VM is running. See [docs/06-measurements.md §13.5](06-measurements.md)
+for the full story.
+
+---
+
+## Issue 12: Terraform Wants to Redeploy All Four Functions After Every Test Run
+
+**Symptom:** you run `pytest`, and then `terraform plan` shows four
+Cloud Functions being updated — with a diff that contains no source
+change at all.
+
+**Root cause:** `archive_file` zips the whole source directory, and
+running the test suite leaves `__pycache__/*.pyc` behind in it. Those
+compiled files go into the deployment package, so the package hash
+changes every time the tests run. The deployed package also carries
+bytecode compiled by your local Python (3.13) into a `python312`
+runtime.
+
+**Fix:** keep build artefacts out of the package:
+
+```hcl
+data "archive_file" "function_source" {
+  type        = "zip"
+  source_dir  = var.function_source_dir
+  output_path = "${path.module}/build/backup-trigger.zip"
+  excludes    = ["__pycache__", "*.pyc"]
+}
+```
+
+The symptom is misleading, and that is what makes it worth writing
+down: the diff looks like a source change, so the natural reaction is
+to go looking for an edit that is not there.
 
 ---
 

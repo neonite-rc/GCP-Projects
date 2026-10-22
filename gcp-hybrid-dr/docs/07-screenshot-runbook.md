@@ -421,7 +421,7 @@ in different regions, and their labels.
 
 ### Shot 5.1 — The test suite passing
 
-**Why:** 74 tests is the strongest single credibility signal in the
+**Why:** 87 tests is the strongest single credibility signal in the
 project.
 
 ```bash
