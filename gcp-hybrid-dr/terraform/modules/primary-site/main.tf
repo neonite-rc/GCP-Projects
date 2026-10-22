@@ -83,17 +83,13 @@ resource "google_compute_firewall" "allow_ssh_admin" {
 # addressed.
 #
 # The rule is NOT created by Terraform — GCP creates it with the VPC, so
-# Terraform can only take it over. The `import` block below does that
-# automatically on the first apply (Terraform 1.5+), instead of failing
-# with "already exists". The import block is a no-op on subsequent
-# applies because the resource is already in state.
+# Terraform can only take it over. The `import` block that does that
+# lives in the ROOT module (terraform/imports.tf): Terraform only
+# allows import blocks in the root module, and a module-level one
+# fails `terraform init` with "An import block was detected in
+# \"module.primary\". Import blocks are only allowed in the root
+# module."
 # ---------------------------------------------------------------------------
-
-import {
-  # The rule lives in the global scope, so the import id is just its name.
-  to = google_compute_firewall.disable_default_ssh
-  id = "default-allow-ssh"
-}
 
 resource "google_compute_firewall" "disable_default_ssh" {
   name    = "default-allow-ssh"

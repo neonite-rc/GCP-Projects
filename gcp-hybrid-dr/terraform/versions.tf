@@ -1,5 +1,10 @@
 terraform {
-  required_version = ">= 1.5.0"
+  # 1.9 is the floor: the project uses an `import` block
+  # (terraform/imports.tf) to adopt GCP's default `default-allow-ssh`
+  # firewall rule, and import blocks are only allowed in the root
+  # module. Older versions fail `terraform init` with "An import block
+  # was detected in ...".
+  required_version = ">= 1.9.0"
 
   required_providers {
     google = {
