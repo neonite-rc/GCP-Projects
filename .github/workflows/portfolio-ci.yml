@@ -75,12 +75,21 @@ jobs:
         # machine called clean.
         run: |
           pip install -r requirements-dev.txt
-          ruff check src/ tests/
+          ruff check src/ tests/ scripts/
 
       - name: Unit tests
         run: |
           pip install -r requirements-dev.txt
           pytest tests/ -v --tb=short
+
+      - name: Documentation audit
+        # The project's claim is "measured, not estimated". A measured
+        # number written down three different ways is worse than no
+        # number, so the docs are checked for agreement, for broken
+        # links, and for stale figures that are no longer framed as
+        # history. This script found real inconsistencies when it was
+        # first written.
+        run: python3 scripts/audit-docs.py
 
       - name: Architecture diagram is in sync with its SVG source
         run: |

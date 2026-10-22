@@ -112,6 +112,44 @@ resource "google_compute_firewall" "disable_default_ssh" {
   description = "Disabled by Terraform: the default rule allows SSH from 0.0.0.0/0, which would bypass the admin-IP-only rule."
 }
 
+# ---------------------------------------------------------------------------
+# Disable GCP's default RDP rule — the same reasoning, one port over.
+#
+# `default-allow-rdp` is also created with every new VPC and allows
+# tcp:3389 from 0.0.0.0/0. Nothing on this Debian 12 VM listens on 3389,
+# so it is a latent exposure rather than an active one — but "latent" is
+# exactly the word that stops being true the day something installs a
+# remote-desktop server, and an unnecessary public port on the primary
+# site is an unnecessary public port.
+#
+# Disabling SSH and leaving RDP open is the kind of half-finished
+# hardening a security review is designed to catch. Both rules are
+# managed the same way, and the import block for this one lives in the
+# ROOT module (terraform/imports.tf) for the same reason as the SSH one.
+#
+# `default-allow-icmp` is deliberately LEFT ALONE: path-MTU discovery
+# needs it, and it exposes no service. Disabling it breaks the network
+# for no security gain.
+# ---------------------------------------------------------------------------
+
+resource "google_compute_firewall" "disable_default_rdp" {
+  name    = "default-allow-rdp"
+  network = google_compute_network.vpc.id
+
+  disabled = true
+  priority = 65535
+
+  allow {
+    protocol = "tcp"
+    ports    = ["3389"]
+  }
+
+  source_ranges = ["0.0.0.0/0"]
+  target_tags   = []
+
+  description = "Disabled by Terraform: the default rule allows RDP from 0.0.0.0/0. No service on this VM listens on 3389, but an open remote-administration port is an open remote-administration port."
+}
+
 # Rule 3: explicit deny-all ingress at lowest priority (GCP default is
 # implicit deny; this makes the posture visible and logs blocked attempts)
 resource "google_compute_firewall" "deny_all_ingress" {

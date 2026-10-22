@@ -24,3 +24,12 @@ import {
   to = module.primary.google_compute_firewall.disable_default_ssh
   id = "default-allow-ssh"
 }
+
+# Same story, one port over: tcp:3389 from 0.0.0.0/0. Nothing on the
+# Debian 12 VM listens on 3389, but the rule is a latent exposure and
+# disabling SSH while leaving RDP open is the kind of half-finished
+# hardening a review is designed to catch.
+import {
+  to = module.primary.google_compute_firewall.disable_default_rdp
+  id = "default-allow-rdp"
+}

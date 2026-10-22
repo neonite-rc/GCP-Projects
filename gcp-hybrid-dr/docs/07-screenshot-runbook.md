@@ -58,7 +58,7 @@ public   : www.dr-demo.gcp-hybrid-dr.example.com.
 ```
 
 If `terraform output` fails, the state is not reachable — see
-[Troubleshooting](docs/05-troubleshooting.md).
+[Troubleshooting](05-troubleshooting.md).
 
 > `terraform output -raw` does not work for list-valued outputs, which is
 > why `dns_name_servers` is read with `jq`.
@@ -107,7 +107,7 @@ You should see the ACME Orders table with five rows (`ORD-1001` …
 
 > The site is plain HTTP on a bare IP — there is no TLS without a
 > registered domain, and that is documented in
-> [docs/03-security.md](docs/03-security.md). A browser may show a
+> [docs/03-security.md](03-security.md). A browser may show a
 > "not secure" badge; that is expected, not a defect.
 
 ### Shot 1.2 — The health endpoint

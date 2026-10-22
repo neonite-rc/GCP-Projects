@@ -511,7 +511,7 @@ failover into a "timeout".
 
 Day 9's lesson was "an audit finds what pride misses". Day 10 sharpened
 it: **an audit finds what pride misses; a deployment finds what
-hopefulness misses.** Every one of the 23 bugs was invisible to reading
+hopefulness misses.** Every one of the 32 bugs was invisible to reading
 the code, because the code was internally consistent — it just wasn't
 consistent with how the platform actually behaves.
 
@@ -660,7 +660,7 @@ two things I can only claim."
 6. **A "done" project still fails an honest checklist.** Labels declared
    but never wired, state on a laptop, monitoring covering only the happy
    path — audits catch what pride misses.
-7. **Deploy it.** A design is a hypothesis. Deploying it found 23 bugs
+7. **Deploy it.** A design is a hypothesis. Deploying it found 32 bugs
    that reading the code could not, including one that had meant the
    backup pipeline never worked at all.
 8. **Check what the platform does by default.** `default-allow-ssh` did

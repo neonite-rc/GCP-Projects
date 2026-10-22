@@ -81,6 +81,39 @@ restore → verify, and the primary VM can do none of the read steps.**
   TCP 22 from `0.0.0.0/0` to every instance in a custom-mode VPC. It is
   imported into Terraform and set to `disabled = true`. Without this the
   "SSH is admin-IP-only" claim is false.
+- **The GCP default RDP rule is disabled too** — `default-allow-rdp`
+  allows TCP 3389 from `0.0.0.0/0`. Nothing on this Debian 12 VM
+  listens on 3389, so it is a latent exposure rather than an active
+  one, but "latent" is exactly the word that stops being true the day
+  something installs a remote-desktop server. Disabling SSH and leaving
+  RDP open is the kind of half-finished hardening a security review is
+  designed to catch. It is now imported and disabled the same way.
+- **`default-allow-icmp` is deliberately left enabled** — path-MTU
+  discovery needs it and it exposes no service. Disabling it breaks the
+  network for no security gain.
+
+The full live firewall, measured:
+
+```
+$ gcloud compute firewall-rules list --project gcp-hybrid-dr \
+    --format="table(name,disabled,sourceRanges.list())"
+NAME                                  DISABLED  SOURCE_RANGES
+default-allow-icmp                    False     0.0.0.0/0
+default-allow-internal                False     10.128.0.0/9
+default-allow-rdp                     True      0.0.0.0/0
+default-allow-ssh                     True      0.0.0.0/0
+dr-demo-primary-vpc-allow-http        False     0.0.0.0/0
+dr-demo-primary-vpc-allow-ssh-admin   False     111.93.40.130/32
+dr-demo-primary-vpc-deny-all-ingress  False     0.0.0.0/0
+```
+
+> The `admin_ip_cidr` shown is the workstation's public IPv4 at the time
+> of capture. It is a residential address and it changes — which is
+> itself a finding worth stating: on a network with a dynamic public IP,
+> "admin-IP-only SSH" is a rule you have to keep updating, not a
+> permanent property. `curl -4 https://ifconfig.me` is the check, and
+> `terraform apply` is the fix. This is a real operational cost of the
+> design, documented rather than hidden.
 - **HTTP: public** — the primary IS the website; health checks arrive
   from Google ranges
 - **No HTTPS on the primary** — no TLS certificate without a registered

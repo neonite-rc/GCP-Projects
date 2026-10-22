@@ -51,7 +51,7 @@ DR serving users  : +461s
 Three drills, three times of day: **462s, 461s, 482s** — a 21-second
 spread, and the full round trip (flip, serve, restore) every time.
 
-Deploying it also **found 23 real bugs** that code review had missed —
+Deploying it also **found 32 real bugs** that code review had missed —
 including a backup pipeline that had *never once succeeded*, and an SSH
 firewall rule that was open to the whole internet. See
 [docs/06-measurements.md §12](docs/06-measurements.md).
@@ -159,10 +159,10 @@ Full details: [docs/01-architecture.md](docs/01-architecture.md)
 | Layer | Technology |
 |-------|------------|
 | Cloud services | GCP: Compute Engine (e2-micro, primary site), Cloud Run (DR maintenance page), Cloud Storage (CMEK-encrypted, versioned, retention policy, cross-region replication via Storage Transfer Service), Cloud DNS (alert-driven CNAME failover), Cloud KMS (CMEK keys, 90-day rotation, automatic retirement of superseded versions), Cloud Scheduler, Pub/Sub, Eventarc, Cloud Functions 2nd gen (freshness sentinel + restore drill + DNS failover + key version retirement), Cloud Monitoring (uptime checks, CPU/RPO/drill alerting, DR-posture dashboard) |
-| App runtime | Python 3.12 + Flask + Gunicorn (primary), nginx 1.27 (reverse proxy), nginx 1.27 (DR maintenance page) |
+| App runtime | **Measured on the live VM**: Python 3.11.2 + Flask 2.2.2 + Gunicorn 20.1.0 (primary, from Debian 12's apt), nginx 1.22.1 (reverse proxy). The DR maintenance page is nginx 1.27-alpine (container). The Cloud Functions are `python312`. |
 | Backup | SQLite online backup API (safe while app serves traffic), gzip, sha256 checksums, Cloud Storage JSON API upload with `x-goog-hash: crc32c` (CRC32C validated) |
-| IaC | Terraform >= 1.5, hashicorp/google ~> 5.0, remote state in versioned GCS, 4 modules (`primary-site`, `backup`, `dr-site`, `dns`), validation blocks rejecting unsafe inputs |
-| CI | GitHub Actions: terraform fmt/validate, Trivy IaC scan, ShellCheck, **pytest (74 tests)**, ruff, diagram-sync check |
+| IaC | Terraform >= 1.9 (the floor is set by the `import` block that adopts GCP's default firewall rules — import blocks are root-module only), hashicorp/google ~> 5.0, remote state in versioned GCS, 4 modules (`primary-site`, `backup`, `dr-site`, `dns`), validation blocks rejecting unsafe inputs |
+| CI | GitHub Actions: terraform fmt/validate, Trivy IaC scan, ShellCheck, **pytest (74 tests)**, ruff (version pinned — see [requirements-dev.txt](requirements-dev.txt)), diagram-sync check |
 | Tests | 74 unit tests over all four Cloud Functions, the Flask app, the shell backup pipeline and the drill's DNS/probe helpers — including a real SQLite→gzip→sha256→upload round trip against a stub GCS that **validates the CRC32C exactly as Cloud Storage does** |
 
 ## Cost Analysis
@@ -205,7 +205,10 @@ Arithmetic: [docs/02-cost-analysis.md](docs/02-cost-analysis.md)
 - **SSH hardening** — password auth disabled, root login disabled, OS
   Login disabled, admin-IP-only firewall rule — **and the GCP default
   `default-allow-ssh` rule (which allows SSH from `0.0.0.0/0`) is
-  explicitly imported and disabled by Terraform**
+  explicitly imported and disabled by Terraform.** The same treatment
+  goes to `default-allow-rdp` (tcp:3389 from `0.0.0.0/0`): nothing on
+  the VM listens on it, but disabling SSH and leaving RDP open is the
+  kind of half-finished hardening a review is designed to catch
 - **Failover refuses to fail over into a dead standby** — the function
   probes the standby's `/health` before repointing DNS
 
@@ -337,7 +340,8 @@ Nothing else is outstanding.
 | [docs/03-security.md](docs/03-security.md) | IAM, the integrity chain, and the threat model — including where it stops |
 | [docs/04-scaling.md](docs/04-scaling.md) | Where the RTO actually goes, and the scaling paths |
 | [docs/05-troubleshooting.md](docs/05-troubleshooting.md) | 11 real incidents with the exact error each produces |
-| [docs/06-measurements.md](docs/06-measurements.md) | The measured run, the arithmetic, and the 23 bugs the deployment found |
+| [docs/06-measurements.md](docs/06-measurements.md) | The measured run, the arithmetic, and the 32 bugs the deployment found |
+| [docs/07-screenshot-runbook.md](docs/07-screenshot-runbook.md) | Step-by-step: what to capture, exactly how, and why each shot matters |
 | [JOURNEY.md](JOURNEY.md) | 10 days of decisions, dead ends, and the mistakes |
 | [MISSING.md](MISSING.md) | The scope statement: what is done, what is skipped and why |
 | [gcp-checklist.md](gcp-checklist.md) | The quality/budget checklist, re-verified against the running system |
@@ -347,5 +351,5 @@ Nothing else is outstanding.
 The decisions, dead ends, and arithmetic are in [JOURNEY.md](JOURNEY.md) —
 including the day I discovered the GCS service agent (not the uploader)
 needs the KMS key, why SQLite's online backup API eliminated the need
-to stop the app during backups, and the 23 bugs that only a real
+to stop the app during backups, and the 32 bugs that only a real
 deployment could surface.

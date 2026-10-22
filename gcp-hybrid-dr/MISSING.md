@@ -155,7 +155,7 @@ both directions, and a second Terraform state with its own bootstrap.
 ## ✅ Resolved by the live deployment (2026-10-21)
 
 The project was **deployed for real** and a real disaster was injected.
-That exposed 23 bugs that no amount of code review had found. See
+That exposed 32 bugs that no amount of code review had found. See
 [docs/06-measurements.md](docs/06-measurements.md) and JOURNEY.md
 Day 10.
 
@@ -251,7 +251,7 @@ Day 10.
 ## ✅ Resolved by the live deployment (2026-10-21) — the substantive rewrite
 
 Everything in this section was found by **running the thing**, not by
-reading it. Details and the full list of 23 bugs:
+reading it. Details and the full list of 32 bugs:
 [docs/06-measurements.md §12](docs/06-measurements.md).
 
 ### The DNS failover was rebuilt — CNAME, and no domain required

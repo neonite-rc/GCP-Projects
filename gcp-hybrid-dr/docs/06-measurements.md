@@ -523,8 +523,8 @@ measure it.**
 
 ## 12. Findings from the live run
 
-The deployment was the point. It surfaced bugs that no amount of code
-review had:
+The deployment was the point. It surfaced **32 bugs** that no amount of
+code review had:
 
 | # | Finding | Fix |
 |---|---------|-----|
@@ -551,6 +551,15 @@ review had:
 | 21 | The Flask app interpolated database values into HTML with no escaping | `markupsafe.escape` on every value |
 | 22 | Both Cloud Functions materialised the entire bucket listing | Stream it and keep only the newest |
 | 23 | Rotated KMS key versions were never retired — every 90 days a new billed version appeared and nothing removed it, forever | A monthly `key-version-retirement` function destroys superseded versions older than the backup retention window. **Verified live.** |
+| 24 | The key-version retirement function used a version's **create** time as its age, but a version's create time is when it became *primary* — destroying it made every live backup unreadable | Retire on **supersession** time (the successor's create time). See §11.1. Recovered only because of KMS's 30-day soft-delete window. |
+| 25 | `default-allow-rdp` (tcp:3389 from `0.0.0.0/0`) was left enabled while SSH was disabled | Imported and disabled, the same way as SSH. `default-allow-icmp` is left alone on purpose — path-MTU discovery needs it |
+| 26 | The README claimed "Python 3.12 + nginx 1.27" for the primary; the VM actually runs Python **3.11.2**, Flask 2.2.2, Gunicorn 20.1.0 and nginx **1.22.1** (Debian 12's apt) | Corrected to the measured values. In a project whose pitch is "measured, not estimated", the runtime table is not allowed to be an estimate |
+| 27 | `google-cloud-kms` was missing from `requirements-dev.txt`, so a clean install failed 3 tests with `ImportError: cannot import name 'kms'` | Added. The local venv had it from an ad-hoc install, so only a from-scratch environment exposed it — which is exactly what CI does |
+| 28 | The linter was unpinned: local ruff 0.16.4 called the code clean, CI's latest ruff reported 11 errors on the *same* code | `ruff==0.16.4` pinned in `requirements-dev.txt`, the rule set declared explicitly in `pyproject.toml`. A linter whose defaults can change under you cannot be a gate |
+| 29 | The Trivy action's **default** version (`v0.65.0`) is not a real Trivy release — the install script resolves the tag, then the download fails with exit 1 | Pinned `version: v0.76.1`, verified to exist |
+| 30 | An `import` block inside a child module fails `terraform init` ("Import blocks are only allowed in the root module") | Moved to `terraform/imports.tf`; the Terraform floor raised to `>= 1.9.0` |
+| 31 | The security-logs bucket had no object versioning — the last bucket in the project without it (found by Trivy once the scanner worked) | Versioning enabled, with the noncurrent-version cleanup that stops the bucket growing forever |
+| 32 | **GitHub only registers workflows in a repository's ROOT `.github/workflows/`.** The sibling project's CI had therefore never run once — the repo's entire run history was Dependabot's graph update | A root-level `portfolio-ci.yml` runs each project's checks with the working directory scoped. Each project keeps its own workflow so it still works when cloned standalone |
 
 A fourteenth class of bug was in the **drill script** rather than the
 platform: its resolver and probe logic was wrong four separate ways
@@ -560,6 +569,134 @@ resolver; the standby is TLS-only and the primary is not). Each one
 turned a *working* failover into a reported "timeout". They are fixed
 and pinned by 9 unit tests, because a measuring instrument that lies is
 worse than no instrument.
+
+---
+
+## 13. The toolchain is part of the system
+
+Findings 27–32 above all came from the same place: **pushing the code
+to GitHub and letting CI run it.** None of them could have been found by
+running the tests locally, because the problem was the *difference*
+between two environments.
+
+### 13.1 GitHub only registers workflows in the repository's ROOT
+
+This one is worth its own section, because it is a fact about GitHub
+that is not obvious and has a silent failure mode: **a workflow file
+inside a nested directory is treated as an ordinary project file and
+never runs.**
+
+The portfolio lives in a monorepo (`neonite-rc/GCP-Projects`) with each
+project in its own directory. The sibling project had its CI defined at
+`gcp-zero-trust-access-proxy/.github/workflows/terraform.yml` — and had
+**never run once**. The repository's entire run history was Dependabot's
+graph update. Two projects, one of them with a full CI definition, and
+neither was being tested.
+
+The fix is a root-level `.github/workflows/portfolio-ci.yml` that runs
+each project's checks with the working directory scoped to it. Each
+project also keeps its own workflow file, so it still works when cloned
+standalone — and the standalone one uses `github.action_path` to find
+its own directory, which works in both layouts:
+
+```yaml
+defaults:
+  run:
+    working-directory: ${{ github.action_path }}/../..
+```
+
+`github.action_path` is the directory of the *workflow file*, so
+`../..` is the project root whether the project is the repository or a
+subdirectory of one. A hardcoded `working-directory: terraform` resolves
+to the monorepo root and fails — which is what the sibling project's
+workflow would have done if it had ever been registered.
+
+### 13.2 A linter whose defaults can change is not a gate
+
+The local machine had ruff 0.16.4 and reported the code as clean. CI
+installed the latest ruff and reported **11 errors on the same code**:
+
+```
+UP017 [*] Use `datetime.UTC` alias
+  --> tests/test_scripts.py:217:24
+```
+
+Newer ruff only suggests the 3.11-only `datetime.UTC` alias once the
+target version is 3.11+. The fix was two-sided:
+
+- **`pyproject.toml` declares the rule set explicitly** — the ruff
+  default plus import ordering and pyupgrade, with
+  `target-version = "py310"`. The verdict is now recorded in the
+  repository instead of inherited from a default that can change under
+  you. `py310` rather than `py311` on purpose: the app runs on the
+  VM's Debian 12 system Python, and a lint rule must not raise the
+  app's runtime floor for a style preference. `datetime.timezone.utc`
+  works on every Python 3.
+- **`requirements-dev.txt` pins `ruff==0.16.4`** exactly, and CI
+  installs *that* rather than the latest.
+
+Both were verified against ruff 0.16.4 and ruff 0.17.1 — clean on both.
+
+### 13.3 The clean-environment test that should have existed all along
+
+`google-cloud-kms` was missing from `requirements-dev.txt`. The local
+virtualenv had it from an ad-hoc install months earlier, so the local
+suite passed. A from-scratch environment failed three tests:
+
+```
+ImportError: cannot import name 'kms' from 'google.cloud'
+```
+
+CI installs `requirements-dev.txt` from nothing, so CI would have
+failed on it too. The fix is one line, but the lesson is the shape of
+it: **the local environment is a cache, not a specification.** The
+specification is `requirements-dev.txt`, and only an environment built
+from the specification actually tests it.
+
+Verified from scratch, in a brand-new venv:
+
+```
+$ pip install -r requirements-dev.txt
+$ ruff check src/ tests/
+All checks passed!
+$ python -m pytest tests/ -q
+74 passed
+```
+
+### 13.4 What the CI run actually looks like now
+
+```
+gcp-hybrid-dr: success
+   Terraform fmt: success
+   Terraform init (no backend): success
+   Terraform validate: success
+   Trivy IaC misconfiguration scan: success
+   ShellCheck: success
+   Ruff lint: success
+   Unit tests: success
+   Architecture diagram is in sync with its SVG source: success
+```
+
+Trivy reports **0 misconfigurations** across all four modules. The
+`default-allow-rdp` finding and the security-logs versioning finding
+were both Trivy's, and both are fixed.
+
+### 13.5 The same lesson, fifth time
+
+The pattern in this project has now repeated enough times to be worth
+stating as a rule:
+
+> **Read the documentation, then run the thing.**
+
+The backup pipeline that had never succeeded (§12, #1). The alert
+policy that could not even be created (#4). The rotation leak (§11). The
+key version that destroyed live data (§11.1). And now the toolchain:
+the linter, the scanner, the import block, the missing dependency, and
+the workflow that never ran.
+
+None of these are clever. All of them are the price of trusting a
+platform's description of itself. The project is better for having paid
+it in public.
 
 ### Two account-level limitations found along the way
 
