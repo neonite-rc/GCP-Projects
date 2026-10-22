@@ -7,8 +7,34 @@ pytest>=8.0
 functions-framework==3.*
 google-cloud-storage>=2.14,<3
 google-api-python-client>=2.100,<3
+# The key-version-retirement function imports `google.cloud.kms`. It was
+# MISSING here, which is why a clean `pip install -r requirements-dev.txt`
+# left three of its tests failing with
+#   ImportError: cannot import name 'kms' from 'google.cloud'
+# The local .venv-test happened to have it from an earlier ad-hoc
+# install, so only a from-scratch environment exposed the gap. Keep
+# this list in step with src/functions/*/requirements.txt.
+google-cloud-kms>=2.16,<3
 
 # The primary site's app is tested directly (tests/test_app.py) — the
 # Flask app and its escaping are load-bearing for the failover.
 flask>=3.0
 markupsafe>=2.1
+
+# Linter, PINNED EXACTLY.
+#
+# This is not caution for its own sake. The local ruff was 0.16.4 and
+# reported the code as clean; CI installed the latest ruff and reported
+# 11 errors on the SAME code, because the newer version flags UP017
+# (`datetime.timezone.utc` -> `datetime.UTC`) once the target version
+# is 3.11+. A linter whose default behaviour can change under you
+# cannot be a gate.
+#
+# The rule set is now declared explicitly in pyproject.toml, so the
+# behaviour is recorded in the repo rather than inherited from a
+# default. The pin is belt and braces: it also freezes the rule
+# implementations, so a patch release cannot change the verdict.
+#
+# Bump deliberately: install the new version locally, run
+# `ruff check src/ tests/`, and only then update this line.
+ruff==0.16.4

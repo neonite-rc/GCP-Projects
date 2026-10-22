@@ -90,8 +90,12 @@ jobs:
           python-version: "3.12"
 
       - name: Ruff lint
+        # ruff is pinned in requirements-dev.txt so CI and the local
+        # machine run the SAME linter. Installing the latest version
+        # here is what made CI report 11 errors on code the local
+        # machine called clean.
         run: |
-          pip install ruff
+          pip install -r requirements-dev.txt
           ruff check src/ tests/
 
   test:

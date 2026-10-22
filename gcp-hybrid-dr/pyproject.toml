@@ -1,0 +1,54 @@
+# Tool configuration for gcp-hybrid-dr.
+#
+# This file exists for one reason: to make the linter's behaviour
+# EXPLICIT rather than dependent on whichever version happens to be
+# installed. That is not hypothetical — it is exactly what broke CI.
+#
+# The story: the local ruff was 0.16.4 and passed. CI installed the
+# latest ruff, which flags UP017 (`datetime.timezone.utc` ->
+# `datetime.UTC`) because the Cloud Functions run on Python 3.12 and
+# the alias exists from 3.11. The local run said "clean"; the CI run
+# said "11 errors". Same code, different tool.
+#
+# The fix has two halves:
+#
+#   1. Pin the version (see requirements-dev.txt) so local and CI run
+#      the same linter.
+#   2. Declare the rule set here, so the rule set is a decision
+#      recorded in the repo rather than a side effect of a default
+#      that can change under you.
+#
+# pytest is configured in pytest.ini, which takes precedence over any
+# [tool.pytest.ini_options] here.
+
+[tool.ruff]
+# The code must run on the primary site's system Python, which comes
+# from the VM's Debian 12 apt repositories -- not from a pinned
+# interpreter. So the floor is what the OLDEST supported base image
+# provides, not what the newest runtime happens to be.
+#
+# py310 matters more than it looks. Ruff's pyupgrade rules only
+# suggest the 3.11-only `datetime.UTC` alias when the target version
+# is 3.11+, and the Cloud Functions run on python312 while the VM runs
+# Debian 12's python3 (3.11). Declaring 3.10 keeps the lint rule from
+# pushing the app's runtime floor up for a style preference -- and
+# `datetime.timezone.utc` works on every Python 3.
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+# The ruff default set (pycodestyle errors, pyflakes) plus import
+# ordering and pyupgrade. Deliberately no opinionated rule sets
+# (bandit, pydocstyle, flake8-bugbear) — this project's security
+# posture is enforced by Trivy's IaC scan and by the live IAM model,
+# not by a lint rule.
+select = ["E4", "E7", "E9", "F", "I", "UP"]
+
+[tool.ruff.lint.isort]
+# Match the existing import style: stdlib, then third party, then local.
+known-first-party = ["tests"]
+
+[tool.ruff.lint.per-file-ignores]
+# The function entry points are imported by their module path in the
+# unit tests, which ruff's import rules read as un-sorted.
+"tests/*.py" = ["E402"]
