@@ -243,9 +243,33 @@ resource "google_storage_bucket" "security_logs" {
   force_destroy               = true
   labels                      = var.labels
 
+  # Versioning on the audit trail: this bucket is the record of every
+  # denied connection attempt, so "someone deleted the evidence" has to
+  # be recoverable. Same control, same reason, as the backup bucket.
+  #
+  # Caught by Trivy's GCP-0078 check (AVD-GCP-0078) in CI — the last
+  # bucket in the project without it.
+  versioning {
+    enabled = true
+  }
+
+  # 30-day rolling window for the log objects themselves.
   lifecycle_rule {
     condition {
       age = 30
+    }
+    action {
+      type = "Delete"
+    }
+  }
+
+  # Cap noncurrent-version buildup. Versioning without this would make
+  # the bucket grow forever: the age rule above only removes CURRENT
+  # versions, and every superseded version would sit there uncounted.
+  # Same guard the backup bucket carries.
+  lifecycle_rule {
+    condition {
+      days_since_noncurrent_time = 7
     }
     action {
       type = "Delete"

@@ -52,6 +52,10 @@ jobs:
       - name: Trivy IaC misconfiguration scan
         uses: aquasecurity/trivy-action@v0.33.0
         with:
+          # The action's DEFAULT Trivy version (v0.65.0) is not a real
+          # release -- the install script finds the tag, then the
+          # download fails with exit 1. Pin a version that exists.
+          version: v0.76.1
           scan-type: config
           scan-ref: ${{ github.action_path }}/../../terraform
           severity: MEDIUM,HIGH,CRITICAL
