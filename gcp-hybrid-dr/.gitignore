@@ -1,0 +1,46 @@
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+# NOTE: .terraform.lock.hcl is intentionally tracked — pins provider
+# versions so CI validates against the same provider builds as local runs.
+terraform.tfvars
+*.auto.tfvars
+crash.log
+
+# Secrets — never commit
+*.key
+*.pem
+.env
+.env.*
+!terraform.tfvars.example
+
+# Build artifacts
+*.zip
+build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Session transcripts — local working notes, not part of the portfolio
+session-*.md
+session*.md
+
+# Terraform build artifacts (zipped function sources)
+terraform/**/build/
+
+# Local test venv
+.venv-test/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Terraform plan files (machine-specific, can contain secrets)
+*.tfplan
+tfplan
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/

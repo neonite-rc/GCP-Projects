@@ -1,0 +1,14 @@
+# Development/test dependencies for the Cloud Functions and scripts.
+#
+# The deployed functions pin their own requirements in
+# src/functions/*/requirements.txt — this file is only for running the
+# test suite locally and in CI.
+pytest>=8.0
+functions-framework==3.*
+google-cloud-storage>=2.14,<3
+google-api-python-client>=2.100,<3
+
+# The primary site's app is tested directly (tests/test_app.py) — the
+# Flask app and its escaping are load-bearing for the failover.
+flask>=3.0
+markupsafe>=2.1

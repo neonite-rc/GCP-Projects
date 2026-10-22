@@ -1,0 +1,4 @@
+# Installed via apt on the VM (python3-flask, gunicorn) to avoid pip on a
+# production host; this file exists for local development only.
+flask>=3.0
+gunicorn>=21.0

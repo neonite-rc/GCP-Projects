@@ -1,0 +1,130 @@
+# ---------------------------------------------------------------------------
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+#
+# Only the values marked REQUIRED have no sensible default. Everything
+# else is shown with its default so you can see what the project does
+# out of the box.
+#
+#   cp terraform.tfvars.example terraform.tfvars
+#   $EDITOR terraform.tfvars
+# ---------------------------------------------------------------------------
+
+# --- REQUIRED -------------------------------------------------------------
+
+project_id = "my-project-id"
+
+# Your workstation IP — the ONLY address allowed to SSH into the primary VM.
+# Get it with: curl -4 https://ifconfig.me
+#
+# NOTE: this is your *residential* IP and it changes. When it does, SSH
+# stops working until you update it and re-apply:
+#   gcloud compute instances describe <instance> --zone <zone>
+# gives you the external IP; if the firewall is blocking you, the console's
+# "SSH" button works regardless because it goes through IAP.
+admin_ip_cidr = "203.0.113.7/32"
+
+# SSH public key (paste the contents of ~/.ssh/id_ed25519.pub)
+ssh_public_key = "ssh-ed25519 AAAA... user@host"
+
+# Email for RPO-breach, restore-drill and primary-down alerts
+alert_email = "you@example.com"
+
+# --- DNS failover (optional but this is the interesting part) --------------
+
+# The DNS zone. NO REGISTERED DOMAIN IS REQUIRED: a Cloud DNS zone is
+# authoritative for its own name, and its nameservers answer queries for
+# anyone who asks them directly:
+#
+#   dig @ns-cloud-a1.googledomains.com www.dr-demo.example.com CNAME
+#
+# That is enough to demonstrate and measure the whole failover path.
+# Registering a domain is only needed for real-world public resolution.
+enable_dns = true
+dns_name   = "dr-demo.example.com."
+
+# The custom role that lets the failover function edit record sets.
+#
+# The obvious choice, roles/dns.resourceRecordsAdmin, DOES NOT EXIST on
+# GCP — the IAM API 404s it and Cloud DNS silently stores an empty
+# policy, so the function looks permissioned and can do nothing. Create
+# the role once with:
+#
+#   gcloud iam roles create drFailoverDnsAdmin --project=PROJECT_ID \
+#     --title="DR DNS Failover Admin" \
+#     --permissions=dns.resourceRecordSets.create,dns.resourceRecordSets.delete,dns.resourceRecordSets.get,dns.resourceRecordSets.list,dns.resourceRecordSets.update,dns.changes.create,dns.changes.get,dns.changes.list,dns.managedZones.get,dns.managedZones.list
+#
+# Leave empty to skip the binding — the zone's records are then managed
+# by Terraform alone and the failover function cannot change them.
+dns_failover_role_id = "projects/my-project-id/roles/drFailoverDnsAdmin"
+
+# --- Budget guardrail (optional) -------------------------------------------
+
+# Monthly budget alert, thresholds at 50% / 90% / 100%.
+# Find your account with: gcloud beta billing accounts list
+billing_account_id    = ""
+monthly_budget_amount = 5
+
+# The budget currency MUST match the billing account's currency, or the
+# API rejects it with a bare "Request contains an invalid argument".
+# Check with: gcloud beta billing accounts describe ACCOUNT_ID
+billing_currency = "USD"
+
+# Send the budget notifications to this project's monitoring channels
+# (email + the failover Pub/Sub topic) instead of only to the billing
+# account's default IAM recipients.
+#
+# Off by default because the Cloud Billing Budget API rejects the
+# `allUpdatesRule` field outright on some accounts:
+#   "Unknown name \"allUpdatesRule\" at 'budget': Cannot find field."
+budget_notify = false
+
+# --- Everything else, shown with its default ------------------------------
+
+# Prefix for every resource name
+# name_prefix = "dr-demo"
+
+# Regions
+# region   = "us-east1"   # primary VM + backup bucket + KMS key
+# zone     = "us-east1-b" # the VM's zone
+# dr_region = "us-west1"  # replica bucket + Cloud Run standby
+
+# Network
+# subnet_cidr = "10.10.0.0/24"
+
+# VM
+# machine_type  = "e2-micro"  # free tier in us-east1
+# boot_disk_size = 10
+# ssh_user      = "admin"
+
+# Backups
+# backup_retention_days = 30
+# rpo_max_hours         = 24   # the freshness sentinel's alert threshold
+#
+# THE RPO DIAL. '0 2 * * *' (nightly) = worst case ~22h data loss.
+# '0 * * * *' (hourly) = RPO <1h at $0 extra. Applies at FIRST VM BOOT
+# only — changing it later means editing /etc/cron.d/dr-backup on the
+# VM or recreating it.
+# backup_cron = "0 2 * * *"
+
+# Ransomware-grade protection: lock the backup retention windows
+# PERMANENTLY. Once true, even a project owner cannot delete backups
+# younger than backup_retention_days — and `terraform destroy` must wait
+# for them to age out.
+# lock_backup_retention = false
+
+# Schedules
+# freshness_check_cron = "0 3 * * *"  # daily freshness check, after the backup
+# restore_drill_cron   = "0 5 * * 0"  # weekly restore drill, Sunday 05:00 UTC
+
+# Labels applied to every labelable resource
+# labels = {
+#   project     = "gcp-hybrid-dr"
+#   environment = "portfolio"
+#   managed-by  = "terraform"
+# }
+
+# Cosmetic extra: map a real domain to the Cloud Run standby. Requires
+# the domain verified in Google Search Console. NOT needed for failover —
+# the failover target is the standby's *.a.run.app hostname.
+# dr_domain            = ""
+# enable_domain_mapping = false

@@ -1,0 +1,139 @@
+name: Terraform CI
+
+# `paths` keeps this workflow from running on unrelated projects in the
+# monorepo, and `github.action_path` makes the working directory
+# correct in BOTH layouts:
+#
+#   standalone:  <repo>/.github/workflows        -> ../terraform
+#   monorepo:    <repo>/gcp-hybrid-dr/.github/workflows -> ../terraform
+#
+# A hardcoded "terraform" would resolve to the monorepo root and fail.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "gcp-hybrid-dr/**"
+      - ".github/workflows/terraform.yml"
+  pull_request:
+    paths:
+      - "gcp-hybrid-dr/**"
+      - ".github/workflows/terraform.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.action_path }}/../../terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.*"
+
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init (no backend)
+        run: terraform init -backend=false
+
+      - name: Terraform validate
+        run: terraform validate
+
+  security-scan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.action_path }}/../..
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trivy IaC misconfiguration scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: ${{ github.action_path }}/../../terraform
+          severity: MEDIUM,HIGH,CRITICAL
+          exit-code: "1"
+
+  lint-shell:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.action_path }}/../..
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ShellCheck
+        run: |
+          shellcheck src/scripts/*.sh
+
+      - name: bash syntax check
+        run: |
+          for f in src/scripts/*.sh; do bash -n "$f"; done
+
+  lint-python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.action_path }}/../..
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Ruff lint
+        run: |
+          pip install ruff
+          ruff check src/ tests/
+
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.action_path }}/../..
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run unit tests
+        run: pytest tests/ -v --tb=short
+
+  docs:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.action_path }}/../..
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the architecture diagram PNG matches its SVG source
+        run: |
+          # assets/architecture.png is generated from assets/architecture.svg.
+          # A stale PNG means the README shows a diagram that no longer
+          # matches the design — worth failing the build over.
+          if ! command -v magick >/dev/null && ! command -v convert >/dev/null; then
+            echo "imagemagick not available; skipping render check"
+            exit 0
+          fi
+          if command -v magick >/dev/null; then
+            magick -background white assets/architecture.svg /tmp/arch.png
+          else
+            convert -background white assets/architecture.svg /tmp/arch.png
+          fi
+          # Compare the rendered pixels, not the bytes: PNG encoders differ.
+          if ! compare -metric AE assets/architecture.png /tmp/arch.png null: 2>&1 | grep -qE '^0$'; then
+            echo "::error::assets/architecture.png is out of date with assets/architecture.svg"
+            echo "Regenerate it with: magick -background white assets/architecture.svg assets/architecture.png"
+            exit 1
+          fi
+          echo "architecture.png is in sync with architecture.svg"

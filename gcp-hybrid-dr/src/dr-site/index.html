@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ACME Orders — Temporarily Unavailable</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; margin: 0; background: #f6f8fa; color: #24292f;
+    }
+    .card {
+      max-width: 34rem; padding: 2.5rem; background: #fff;
+      border: 1px solid #d0d7de; border-radius: 12px; text-align: center;
+    }
+    h1 { font-size: 1.5rem; margin: 0 0 .75rem; }
+    p { line-height: 1.6; margin: .5rem 0; }
+    .badge {
+      display: inline-block; padding: .2rem .6rem; border-radius: 999px;
+      background: #fff8c5; border: 1px solid #d4a72c; font-size: .8rem;
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <span class="badge">Disaster Recovery Site</span>
+    <h1>We&rsquo;ll be right back</h1>
+    <p>ACME Orders is temporarily unavailable while we recover the
+       primary site.</p>
+    <p>Your data is safe: encrypted backups are taken nightly and
+       replicated across regions.</p>
+    <p><small>Served from the standby DR site on Cloud Run.</small></p>
+  </main>
+</body>
+</html>
